@@ -1,0 +1,40 @@
+self.addEventListener("install", (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  if (event.data) {
+    try {
+      payload = event.data.json();
+    } catch (error) {
+      payload = { title: "Water Log alert", message: event.data.text() };
+    }
+  }
+
+  const title = payload.title || "Water Log alert";
+  const options = {
+    body: payload.message || payload.body || "Open Water Log for details.",
+    icon: "/awrc-logo.png",
+    badge: "/awrc-logo.png",
+    tag: payload.tag || "water-log-alert",
+    data: payload.url || "./",
+    requireInteraction: Boolean(payload.requireInteraction)
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      if (clients.length) return clients[0].focus();
+      return self.clients.openWindow("./");
+    })
+  );
+});

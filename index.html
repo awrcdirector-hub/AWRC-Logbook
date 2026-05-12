@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0f6f7d">
+    <title>Aramoho-Whanganui RC - Water Log</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="/awrc-logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="/awrc-logo.png">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Crew safety and plant tracking</p>
+          <h1>Aramoho-Whanganui RC - Water Log</h1>
+        </div>
+        <img class="club-logo" src="/awrc-logo.png" alt="Aramoho-Whanganui Rowing Club logo">
+        <div class="summary">
+          <span><strong id="outCount">0</strong> out</span>
+          <span><strong id="lateCount">0</strong> late</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="action-band" aria-label="Primary actions">
+          <button class="big-action active" type="button" data-view="signout">Sign Out</button>
+          <button class="big-action" type="button" data-view="signin">Sign In</button>
+          <button class="big-action" type="button" data-view="water">On Water</button>
+          <button class="big-action" type="button" data-view="plant">Plant</button>
+          <button class="big-action" type="button" data-view="logbook">Logbook</button>
+        </section>
+
+        <section class="notice" id="notificationNotice">
+          <div>
+            <strong>Phone pop-up notifications</strong>
+            <p>This prototype can show browser notifications on this device. A live club version will need push notifications so alerts still arrive when the app is closed.</p>
+          </div>
+          <button type="button" id="enableNotifications">Enable</button>
+        </section>
+
+        <section class="view active" id="view-signout">
+          <form id="signOutForm" class="panel">
+            <h2>Sign Crew Out</h2>
+            <label>
+              Boat
+              <select id="boatSelect" required></select>
+            </label>
+            <div class="member-section">
+              <div class="panel-head">
+                <h3>Crew members</h3>
+                <span class="seat-count" id="seatCount">0 seats</span>
+              </div>
+              <div class="member-grid-head" aria-hidden="true">
+                <span></span>
+                <span>Rower</span>
+                <span>Captain</span>
+              </div>
+              <div id="memberList" class="member-list"></div>
+            </div>
+            <div class="cox-section" id="coxSection" hidden>
+              <label>
+                Coxswain
+                <select id="coxSelect"></select>
+              </label>
+              <label class="captain-check cox-captain-check" aria-label="Captain">
+                <input type="checkbox" id="coxCaptain" data-captain="coxswain">
+              </label>
+            </div>
+            <label>
+              Expected back
+              <input id="dueTime" type="time" required>
+            </label>
+            <label>
+              Notes
+              <textarea id="notes" rows="2" placeholder="Optional"></textarea>
+            </label>
+            <p class="form-message" id="signOutMessage" role="status" aria-live="polite"></p>
+            <button class="submit" type="submit">Sign Out Now</button>
+          </form>
+        </section>
+
+        <section class="view" id="view-signin">
+          <div class="panel">
+            <h2>Sign Crew In</h2>
+            <div id="signInList" class="list"></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-water">
+          <div class="panel">
+            <h2>On Water Now</h2>
+            <div id="onWaterList" class="list"></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-plant">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Plant</h2>
+              <button class="small-button" type="button" id="resetDemo">Reset Demo</button>
+            </div>
+            <div id="plantList" class="list"></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-logbook">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Historical Logbook</h2>
+              <button class="small-button" type="button" id="exportLogbook">Export CSV</button>
+            </div>
+            <p class="muted">Completed and active outings are kept here for safety and review.</p>
+            <div id="logbookList" class="logbook-list"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
