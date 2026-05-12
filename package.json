@@ -1,0 +1,12 @@
+{
+  "name": "awrc-water-log",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "vapid": "node scripts/generate-vapid-keys.js"
+  },
+  "dependencies": {
+    "web-push": "^3.6.7"
+  }
+}
