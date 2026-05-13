@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0f6f7d">
+    <title>Aramoho-Whanganui RC - Outing Logbook</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="/awrc-logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="/awrc-logo.png">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Crew safety and plant tracking</p>
+          <h1>Aramoho-Whanganui RC - Outing Logbook</h1>
+        </div>
+        <button class="logo-button" type="button" onclick="window.open('https://docs.google.com/spreadsheets/d/1mmKMRZyJSR3mr8VocTQ2Mimz6OavPIqyVza0tBUV_FU/edit?gid=344134665#gid=344134665', '_blank', 'noopener')" aria-label="Open AWRC Hub">
+          <img class="club-logo" src="/awrc-logo.png" alt="Aramoho-Whanganui Rowing Club logo">
+        </button>
+        <div class="summary">
+          <span><strong id="outCount">0</strong> out</span>
+          <span><strong id="lateCount">0</strong> late</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="action-band" aria-label="Primary actions">
+          <button class="big-action active" type="button" data-view="signout">Sign Out</button>
+          <button class="big-action" type="button" data-view="signin">Sign In</button>
+          <button class="big-action" type="button" data-view="water">On Water</button>
+          <button class="big-action" type="button" data-view="plant">Plant</button>
+          <button class="big-action" type="button" data-view="logbook">Logbook</button>
+          <button class="big-action" type="button" data-view="admin">Admin</button>
+        </section>
+
+        <section class="notice" id="notificationNotice">
+          <div>
+            <strong>Phone pop-up notifications</strong>
+            <p>This prototype can show browser notifications on this device. A live club version will need push notifications so alerts still arrive when the app is closed.</p>
+            <label class="notify-person">
+              This device belongs to
+              <select id="notifyPerson"></select>
+            </label>
+          </div>
+          <button type="button" id="enableNotifications">Enable</button>
+        </section>
+
+        <section class="view active" id="view-signout">
+          <form id="signOutForm" class="panel">
+            <h2>Sign Crew Out</h2>
+            <label>
+              Boat
+              <button id="boatSearch" class="picker-trigger" type="button">Choose boat</button>
+              <input id="boatSelect" type="hidden">
+            </label>
+            <div class="member-section">
+              <div class="panel-head">
+                <h3>Crew members</h3>
+                <span class="seat-count" id="seatCount">0 seats</span>
+              </div>
+              <div class="member-grid-head" aria-hidden="true">
+                <span></span>
+                <span>Rower</span>
+                <span>Captain</span>
+              </div>
+              <div id="memberList" class="member-list"></div>
+            </div>
+            <div class="cox-section" id="coxSection" hidden>
+              <label>
+                Coxswain
+                <button id="coxSearch" class="picker-trigger" type="button">Choose coxswain</button>
+                <input id="coxSelect" type="hidden">
+              </label>
+              <label class="captain-check cox-captain-check" aria-label="Captain">
+                <input type="checkbox" id="coxCaptain" data-captain="coxswain">
+              </label>
+            </div>
+            <label>
+              Expected back
+              <input id="dueTime" type="time" required>
+            </label>
+            <label>
+              Notes
+              <textarea id="notes" rows="2" placeholder="Optional"></textarea>
+            </label>
+            <p class="form-message" id="signOutMessage" role="status" aria-live="polite"></p>
+            <button class="submit" type="submit">Sign Out Now</button>
+          </form>
+        </section>
+
+        <section class="view" id="view-signin">
+          <div class="panel">
+            <h2>Sign Crew In</h2>
+            <div id="signInList" class="list"></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-water">
+          <div class="panel">
+            <h2>On Water Now</h2>
+            <div id="onWaterList" class="list"></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-plant">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Plant</h2>
+              <button class="small-button" type="button" id="resetDemo">Reset Demo</button>
+            </div>
+            <div id="plantList" class="list"></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-logbook">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Historical Logbook</h2>
+              <button class="small-button" type="button" id="exportLogbook">Export CSV</button>
+            </div>
+            <p class="muted">Completed and active outings are kept here for safety and review.</p>
+            <div id="logbookList" class="logbook-list"></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-admin">
+          <div class="panel">
+            <h2>Admin</h2>
+            <div id="adminLogin" class="admin-login">
+              <label>
+                Admin password
+                <input id="adminPassword" type="password" autocomplete="current-password" placeholder="Enter password">
+              </label>
+              <button class="submit" type="button" id="adminUnlock">Unlock Admin</button>
+            </div>
+            <div id="adminTools" class="admin-tools" hidden>
+              <form id="addAthleteForm" class="admin-card">
+                <h3>Add athlete</h3>
+                <label>
+                  Name
+                  <input id="adminAthleteName" type="text" autocomplete="off" placeholder="Athlete name">
+                </label>
+                <label>
+                  Group
+                  <select id="adminAthleteGrade">
+                    <option>Novice</option>
+                    <option>Intermediate</option>
+                    <option>Club</option>
+                    <option>Senior</option>
+                    <option>Premier</option>
+                    <option>Masters</option>
+                    <option>Coxswain</option>
+                    <option>Visitor</option>
+                  </select>
+                </label>
+                <button class="submit" type="submit">Add Athlete</button>
+              </form>
+
+              <form id="addBoatForm" class="admin-card">
+                <h3>Add boat</h3>
+                <label>
+                  Boat name
+                  <input id="adminBoatName" type="text" autocomplete="off" placeholder="Boat name">
+                </label>
+                <label>
+                  Seats
+                  <select id="adminBoatSeats">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="4">4</option>
+                    <option value="8">8</option>
+                  </select>
+                </label>
+                <label>
+                  Status
+                  <select id="adminBoatStatus">
+                    <option value="available">Available</option>
+                    <option value="rigged">Rigged</option>
+                    <option value="derigged">Derigged</option>
+                    <option value="damage">Damage / unavailable</option>
+                  </select>
+                </label>
+                <button class="submit" type="submit">Add Boat</button>
+              </form>
+
+              <form id="boatStatusForm" class="admin-card">
+                <h3>Adjust boat availability</h3>
+                <label>
+                  Boat
+                  <select id="adminStatusBoat"></select>
+                </label>
+                <label>
+                  Status
+                  <select id="adminStatusValue">
+                    <option value="available">Available</option>
+                    <option value="rigged">Rigged</option>
+                    <option value="derigged">Derigged</option>
+                    <option value="damage">Damage / unavailable</option>
+                  </select>
+                </label>
+                <label>
+                  Note
+                  <textarea id="adminStatusNote" rows="2" placeholder="Optional note"></textarea>
+                </label>
+                <button class="submit" type="submit">Update Boat</button>
+              </form>
+            </div>
+            <p class="form-message" id="adminMessage" role="status" aria-live="polite"></p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="picker-overlay" id="pickerOverlay" hidden>
+      <div class="picker-panel" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
+        <div class="picker-head">
+          <h2 id="pickerTitle">Choose</h2>
+          <button type="button" class="small-button" id="pickerClose">Close</button>
+        </div>
+        <input id="pickerSearch" type="search" autocomplete="off" placeholder="Search">
+        <div class="picker-list" id="pickerList"></div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
