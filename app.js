@@ -397,7 +397,7 @@ async function saveSharedOuting(outing) {
 
 async function saveSharedSignIn(outing, issueType = "normal") {
   try {
-    await fetch(`${API_BASE_URL}/api/outings/${encodeURIComponent(outing.id)}/sign-in`, {
+    const response = await fetch(`${API_BASE_URL}/api/outings/${encodeURIComponent(outing.id)}/sign-in`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -410,8 +410,11 @@ async function saveSharedSignIn(outing, issueType = "normal") {
         maintenanceIssue: issueType !== "normal"
       })
     });
+    if (!response.ok) throw new Error("Shared sign-in request failed");
+    return await response.json();
   } catch (error) {
     console.warn("Shared sign-in sync failed", error);
+    return null;
   }
 }
 
@@ -1200,7 +1203,8 @@ async function signInCrew(id, issueType = "normal") {
   }
 
   save();
-  saveSharedSignIn(outing, issueType);
+  const sharedResult = await saveSharedSignIn(outing, issueType);
+  if (sharedResult?.outing) Object.assign(outing, sharedResult.outing);
   sendLogbookEvent(issueType === "normal" ? "signed_in" : `signed_in_${issueType}`, outing);
     sendNotificationForAlert({
       key: `signed-in-${outing.id}`,
