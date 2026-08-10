@@ -193,13 +193,27 @@ function sendWebPushAlert(state, alert) {
   const recipients = new Set((alert.recipients || []).filter(Boolean));
   if (!recipients.size) return;
 
-  (state.subscriptions || [])
+  const expiredEndpoints = new Set();
+  const deliveries = (state.subscriptions || [])
     .filter((item) => recipients.has(item.userName))
-    .forEach((item) => {
+    .map((item) =>
       webPush
         .sendNotification(item.subscription, JSON.stringify(alert))
-        .catch((error) => console.warn("Web push failed", item.userName, error.statusCode || error.message));
+        .catch((error) => {
+          if (error.statusCode === 404 || error.statusCode === 410) {
+            expiredEndpoints.add(item.subscription?.endpoint);
+          }
+          console.warn("Web push failed", item.userName, error.statusCode || error.message);
+        })
+    );
+
+  if (deliveries.length) {
+    Promise.allSettled(deliveries).then(() => {
+      if (!expiredEndpoints.size) return;
+      state.subscriptions = (state.subscriptions || []).filter((item) => !expiredEndpoints.has(item.subscription?.endpoint));
+      writeState(state);
     });
+  }
 }
 
 function mergeConfig(currentConfig = {}, incomingConfig = {}) {
@@ -289,7 +303,8 @@ async function handleApi(request, response, url) {
       sendJson(response, 400, { error: "Missing userName or subscription" });
       return;
     }
-    state.subscriptions = (state.subscriptions || []).filter((item) => item.userName !== body.userName);
+    const endpoint = body.subscription?.endpoint;
+    state.subscriptions = (state.subscriptions || []).filter((item) => item.subscription?.endpoint !== endpoint);
     state.subscriptions.push({
       id: randomUUID(),
       userName: body.userName,

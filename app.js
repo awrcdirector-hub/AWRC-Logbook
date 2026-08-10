@@ -283,6 +283,7 @@ const els = {
   pickerClose: $("#pickerClose")
 };
 let activePicker = null;
+let adminUnlocked = false;
 
 actionButtons.forEach((button) => {
   button.addEventListener("click", () => showView(button.dataset.view));
@@ -1325,6 +1326,7 @@ function unlockAdmin() {
     showAdminMessage("Incorrect admin password.", "error");
     return;
   }
+  adminUnlocked = true;
   els.adminLogin.hidden = true;
   els.adminTools.hidden = false;
   els.adminStatus.textContent = "Unlocked";
@@ -1333,8 +1335,19 @@ function unlockAdmin() {
   showAdminMessage("Admin unlocked for this device.", "success");
 }
 
+function requireAdminUnlocked() {
+  if (adminUnlocked) return true;
+  els.adminLogin.hidden = false;
+  els.adminTools.hidden = true;
+  els.adminStatus.textContent = "Locked";
+  els.adminStatus.classList.remove("unlocked");
+  showAdminMessage("Enter the admin password before making changes.", "error");
+  return false;
+}
+
 function addAdminAthlete(event) {
   event.preventDefault();
+  if (!requireAdminUnlocked()) return;
   const name = els.adminAthleteName.value.trim();
   if (!name) {
     showAdminMessage("Enter an athlete name.", "error");
@@ -1355,6 +1368,7 @@ function addAdminAthlete(event) {
 
 function removeAdminAthlete(event) {
   event.preventDefault();
+  if (!requireAdminUnlocked()) return;
   const name = els.adminRemoveAthlete.value;
   if (!name) {
     showAdminMessage("Choose an athlete to remove.", "error");
@@ -1370,6 +1384,7 @@ function removeAdminAthlete(event) {
 
 function addAdminBoat(event) {
   event.preventDefault();
+  if (!requireAdminUnlocked()) return;
   const name = els.adminBoatName.value.trim();
   if (!name) {
     showAdminMessage("Enter a boat name.", "error");
@@ -1395,6 +1410,7 @@ function addAdminBoat(event) {
 
 function removeAdminBoat(event) {
   event.preventDefault();
+  if (!requireAdminUnlocked()) return;
   const boatId = els.adminRemoveBoat.value;
   const boat = state.plant.find((item) => item.id === boatId);
   if (!boat) {
@@ -1415,6 +1431,7 @@ function removeAdminBoat(event) {
 
 function updateAdminBoatStatus(event) {
   event.preventDefault();
+  if (!requireAdminUnlocked()) return;
   const boat = state.plant.find((item) => item.id === els.adminStatusBoat.value);
   if (!boat) {
     showAdminMessage("Choose a boat to update.", "error");
