@@ -14,7 +14,7 @@ const ADMIN_PASSWORD = "Oxford2018!";
 const ALERT_ROLES = {
   coaches: ["Axel Dickinson", "Allan Luff"],
   safetyOfficer: "Axel Dickinson",
-  alwaysNotify: ["Axel Dickinson"]
+  alwaysNotify: ["Axel Dickinson", "Tiffany Davies"]
 };
 const BOAT_COLOURS = {
   "hammond-family-8": "#F4CCCC",
@@ -135,6 +135,7 @@ const demoData = {
     { name: "Thomas Monaghan", grade: "Masters" },
     { name: "Tony Upchurch", grade: "Masters" },
     { name: "Tracy Wigzell", grade: "Masters" },
+    { name: "Tiffany Davies", grade: "Masters" },
     { name: "Callum Morgan", grade: "Intermediate" },
     { name: "Ruby Bullock", grade: "Club" },
     { name: "Danya Booth", grade: "Intermediate" },
@@ -269,7 +270,11 @@ const els = {
   adminMessage: $("#adminMessage"),
   enableNotifications: $("#enableNotifications"),
   notificationNotice: $("#notificationNotice"),
+  notifyPersonSearch: $("#notifyPersonSearch"),
   notifyPerson: $("#notifyPerson"),
+  adminRemoveAthleteSearch: $("#adminRemoveAthleteSearch"),
+  adminRemoveBoatSearch: $("#adminRemoveBoatSearch"),
+  adminStatusBoatSearch: $("#adminStatusBoatSearch"),
   signOutMessage: $("#signOutMessage"),
   pickerOverlay: $("#pickerOverlay"),
   pickerTitle: $("#pickerTitle"),
@@ -288,10 +293,10 @@ els.boatSearch.addEventListener("click", openBoatPicker);
 els.coxSearch.addEventListener("click", openCoxswainPicker);
 els.coxCaptain.addEventListener("change", (event) => setCaptain(event.target));
 els.enableNotifications.addEventListener("click", enableNotifications);
-els.notifyPerson.addEventListener("change", () => {
-  localStorage.setItem(NOTIFICATION_USER_KEY, els.notifyPerson.value);
-  renderNotificationNotice();
-});
+els.notifyPersonSearch.addEventListener("click", openNotificationPersonPicker);
+els.adminRemoveAthleteSearch.addEventListener("click", openAdminRemoveAthletePicker);
+els.adminRemoveBoatSearch.addEventListener("click", () => openAdminBoatPicker("remove"));
+els.adminStatusBoatSearch.addEventListener("click", () => openAdminBoatPicker("status"));
 els.exportLogbook.addEventListener("click", exportLogbookCsv);
 els.adminUnlock.addEventListener("click", unlockAdmin);
 els.addAthleteForm.addEventListener("submit", addAdminAthlete);
@@ -680,13 +685,9 @@ function render() {
 
 function renderNotificationPersonOptions() {
   const selectedName = localStorage.getItem(NOTIFICATION_USER_KEY) || "";
-  els.notifyPerson.innerHTML = `
-    <option value="">Choose your name</option>
-    ${[...state.members]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((member) => `<option value="${escapeHtml(member.name)}" ${member.name === selectedName ? "selected" : ""}>${escapeHtml(member.name)}</option>`)
-      .join("")}
-  `;
+  const exists = state.members.some((member) => member.name === selectedName);
+  els.notifyPerson.value = exists ? selectedName : "";
+  els.notifyPersonSearch.textContent = exists ? selectedName : "Choose your name";
 }
 
 function renderFormOptions() {
@@ -992,8 +993,71 @@ function openCoxswainPicker() {
   });
 }
 
+function openNotificationPersonPicker() {
+  openPicker({
+    title: "This device belongs to",
+    placeholder: "Type your name",
+    items: sortedMembers().map((member) => ({
+      label: member.name,
+      value: member
+    })),
+    onSelect: (member) => {
+      els.notifyPerson.value = member.name;
+      els.notifyPersonSearch.textContent = member.name;
+      localStorage.setItem(NOTIFICATION_USER_KEY, member.name);
+      renderNotificationNotice();
+      return true;
+    }
+  });
+}
+
+function openAdminRemoveAthletePicker() {
+  openPicker({
+    title: "Remove athlete",
+    placeholder: "Type athlete name",
+    items: sortedMembers().map((member) => ({
+      label: member.name,
+      value: member
+    })),
+    onSelect: (member) => {
+      els.adminRemoveAthlete.value = member.name;
+      els.adminRemoveAthleteSearch.textContent = member.name;
+      return true;
+    }
+  });
+}
+
+function openAdminBoatPicker(target) {
+  const boats = sortedBoats().map((boat) => ({
+    label: boat.name,
+    detail: labelStatus(boat.status),
+    value: boat
+  }));
+  openPicker({
+    title: target === "remove" ? "Remove boat" : "Adjust boat",
+    placeholder: "Type boat name",
+    items: boats,
+    onSelect: (boat) => {
+      if (target === "remove") {
+        els.adminRemoveBoat.value = boat.id;
+        els.adminRemoveBoatSearch.textContent = boat.name;
+      } else {
+        els.adminStatusBoat.value = boat.id;
+        els.adminStatusBoatSearch.textContent = boat.name;
+      }
+      return true;
+    }
+  });
+}
+
 function sortedMembers() {
   return [...state.members].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function sortedBoats() {
+  return [...state.plant]
+    .filter((item) => item.type === "Boat")
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function openPicker(config) {
@@ -1243,18 +1307,17 @@ function renderLogbook() {
 }
 
 function renderAdmin() {
-  const boatOptions = [...state.plant]
-    .filter((item) => item.type === "Boat")
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((boat) => `<option value="${escapeHtml(boat.id)}">${escapeHtml(boat.name)} - ${escapeHtml(labelStatus(boat.status))}</option>`)
-    .join("");
-  els.adminStatusBoat.innerHTML = boatOptions;
-  els.adminRemoveBoat.innerHTML = boatOptions;
+  const removeAthlete = state.members.find((member) => member.name === els.adminRemoveAthlete.value);
+  els.adminRemoveAthleteSearch.textContent = removeAthlete ? removeAthlete.name : "Choose athlete";
+  if (!removeAthlete) els.adminRemoveAthlete.value = "";
 
-  els.adminRemoveAthlete.innerHTML = [...state.members]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((member) => `<option value="${escapeHtml(member.name)}">${escapeHtml(member.name)}</option>`)
-    .join("");
+  const removeBoat = state.plant.find((boat) => boat.id === els.adminRemoveBoat.value);
+  els.adminRemoveBoatSearch.textContent = removeBoat ? removeBoat.name : "Choose boat";
+  if (!removeBoat) els.adminRemoveBoat.value = "";
+
+  const statusBoat = state.plant.find((boat) => boat.id === els.adminStatusBoat.value);
+  els.adminStatusBoatSearch.textContent = statusBoat ? statusBoat.name : "Choose boat";
+  if (!statusBoat) els.adminStatusBoat.value = "";
 }
 
 function unlockAdmin() {

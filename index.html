@@ -42,7 +42,8 @@
             <p>This prototype can show browser notifications on this device. A live club version will need push notifications so alerts still arrive when the app is closed.</p>
             <label class="notify-person">
               This device belongs to
-              <select id="notifyPerson"></select>
+              <button id="notifyPersonSearch" class="picker-trigger" type="button">Choose your name</button>
+              <input id="notifyPerson" type="hidden">
             </label>
           </div>
           <button type="button" id="enableNotifications">Enable</button>
@@ -166,7 +167,8 @@
                 <h3>Remove athlete</h3>
                 <label>
                   Name
-                  <select id="adminRemoveAthlete"></select>
+                  <button id="adminRemoveAthleteSearch" class="picker-trigger" type="button">Choose athlete</button>
+                  <input id="adminRemoveAthlete" type="hidden">
                 </label>
                 <button class="submit danger-submit" type="submit">Remove Athlete</button>
               </form>
@@ -202,7 +204,8 @@
                 <h3>Remove boat</h3>
                 <label>
                   Boat
-                  <select id="adminRemoveBoat"></select>
+                  <button id="adminRemoveBoatSearch" class="picker-trigger" type="button">Choose boat</button>
+                  <input id="adminRemoveBoat" type="hidden">
                 </label>
                 <button class="submit danger-submit" type="submit">Remove Boat</button>
               </form>
@@ -211,7 +214,8 @@
                 <h3>Adjust boat availability</h3>
                 <label>
                   Boat
-                  <select id="adminStatusBoat"></select>
+                  <button id="adminStatusBoatSearch" class="picker-trigger" type="button">Choose boat</button>
+                  <input id="adminStatusBoat" type="hidden">
                 </label>
                 <label>
                   Status
