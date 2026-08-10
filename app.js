@@ -10,7 +10,7 @@ const API_BASE_URL = "";
 const LOGBOOK_WEBHOOK_URL = "";
 const BOAT_STATUS_WEBHOOK_URL = "";
 let pushPublicVapidKey = "";
-const ADMIN_PASSWORD = "Oxford2018!";
+const ADMIN_PASSWORD = "2852";
 const ALERT_ROLES = {
   coaches: ["Axel Dickinson", "Allan Luff"],
   safetyOfficer: "Axel Dickinson",
