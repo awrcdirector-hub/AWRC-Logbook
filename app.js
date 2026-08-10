@@ -717,7 +717,7 @@ function isSignOutFormActive() {
 }
 
 function isBoatSignoutReady(boat) {
-  return boat.status === "rigged" || boat.status === "available";
+  return ["rigged", "available", "derigged", "maintenance"].includes(boat.status);
 }
 
 function boatStatusSuffix(status) {

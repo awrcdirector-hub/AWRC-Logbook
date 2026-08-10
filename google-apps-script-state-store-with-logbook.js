@@ -134,3 +134,32 @@ function json(payload) {
     .createTextOutput(JSON.stringify(payload))
     .setMimeType(ContentService.MimeType.JSON);
 }
+
+function forceSignInByAthleteName() {
+  const athleteName = "Nicky Maxim";
+  const state = readState();
+  const now = new Date().toISOString();
+  let changed = false;
+
+  (state.outings || []).forEach((outing) => {
+    if (outing.inAt) return;
+    const people = [
+      ...(outing.members || []),
+      outing.captain || {},
+      outing.coxswain || {}
+    ];
+    if (!people.some((person) => person && person.name === athleteName)) return;
+
+    outing.inAt = now;
+    outing.issueType = outing.issueType || "normal";
+    outing.returnNotes = outing.returnNotes || "Admin force signed in after sync issue.";
+    changed = true;
+  });
+
+  if (!changed) {
+    throw new Error(`No active outing found for ${athleteName}`);
+  }
+
+  writeState(state);
+  writeOutingsLog(state);
+}
