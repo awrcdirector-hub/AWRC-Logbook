@@ -109,7 +109,6 @@
           <div class="panel">
             <div class="panel-head">
               <h2>Plant</h2>
-              <button class="small-button" type="button" id="resetDemo">Reset Demo</button>
             </div>
             <div id="plantList" class="list"></div>
           </div>
@@ -128,7 +127,10 @@
 
         <section class="view" id="view-admin">
           <div class="panel">
-            <h2>Admin</h2>
+            <div class="panel-head">
+              <h2>Admin</h2>
+              <span class="admin-status" id="adminStatus">Locked</span>
+            </div>
             <div id="adminLogin" class="admin-login">
               <label>
                 Admin password
@@ -136,6 +138,7 @@
               </label>
               <button class="submit" type="button" id="adminUnlock">Unlock Admin</button>
             </div>
+            <p class="form-message admin-message" id="adminMessage" role="status" aria-live="polite"></p>
             <div id="adminTools" class="admin-tools" hidden>
               <form id="addAthleteForm" class="admin-card">
                 <h3>Add athlete</h3>
@@ -157,6 +160,15 @@
                   </select>
                 </label>
                 <button class="submit" type="submit">Add Athlete</button>
+              </form>
+
+              <form id="removeAthleteForm" class="admin-card">
+                <h3>Remove athlete</h3>
+                <label>
+                  Name
+                  <select id="adminRemoveAthlete"></select>
+                </label>
+                <button class="submit danger-submit" type="submit">Remove Athlete</button>
               </form>
 
               <form id="addBoatForm" class="admin-card">
@@ -186,6 +198,15 @@
                 <button class="submit" type="submit">Add Boat</button>
               </form>
 
+              <form id="removeBoatForm" class="admin-card">
+                <h3>Remove boat</h3>
+                <label>
+                  Boat
+                  <select id="adminRemoveBoat"></select>
+                </label>
+                <button class="submit danger-submit" type="submit">Remove Boat</button>
+              </form>
+
               <form id="boatStatusForm" class="admin-card">
                 <h3>Adjust boat availability</h3>
                 <label>
@@ -208,7 +229,6 @@
                 <button class="submit" type="submit">Update Boat</button>
               </form>
             </div>
-            <p class="form-message" id="adminMessage" role="status" aria-live="polite"></p>
           </div>
         </section>
       </main>

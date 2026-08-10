@@ -1,5 +1,6 @@
 const STORAGE_KEY = "club-water-log-prototype-v8";
 const NOTIFICATION_USER_KEY = `${STORAGE_KEY}-notification-user`;
+const SEEN_ALERTS_KEY = `${STORAGE_KEY}-seen-alerts`;
 const OVERDUE_GRACE_MINUTES = 30;
 const FLEET_SYNC_INTERVAL_MS = 60 * 1000;
 const SHARED_SYNC_INTERVAL_MS = 5000;
@@ -8,9 +9,7 @@ const BOAT_ALLOCATION_CSV_URL = "https://docs.google.com/spreadsheets/d/1u5FggSD
 const API_BASE_URL = "";
 const LOGBOOK_WEBHOOK_URL = "";
 const BOAT_STATUS_WEBHOOK_URL = "";
-const PUSH_ALERT_WEBHOOK_URL = "";
-const PUSH_SUBSCRIPTION_WEBHOOK_URL = "";
-const PUSH_PUBLIC_VAPID_KEY = "";
+let pushPublicVapidKey = "";
 const ADMIN_PASSWORD = "Oxford2018!";
 const ALERT_ROLES = {
   coaches: ["Axel Dickinson", "Allan Luff"],
@@ -222,7 +221,7 @@ const demoData = {
 };
 
 let state = load();
-let sharedAlertsPrimed = Boolean(localStorage.getItem(`${STORAGE_KEY}-last-alert-at`));
+let seenAlertKeys = new Set(JSON.parse(localStorage.getItem(SEEN_ALERTS_KEY) || "[]"));
 
 const $ = (selector) => document.querySelector(selector);
 const views = document.querySelectorAll(".view");
@@ -249,15 +248,20 @@ const els = {
   exportLogbook: $("#exportLogbook"),
   adminLogin: $("#adminLogin"),
   adminTools: $("#adminTools"),
+  adminStatus: $("#adminStatus"),
   adminPassword: $("#adminPassword"),
   adminUnlock: $("#adminUnlock"),
   addAthleteForm: $("#addAthleteForm"),
   adminAthleteName: $("#adminAthleteName"),
   adminAthleteGrade: $("#adminAthleteGrade"),
+  removeAthleteForm: $("#removeAthleteForm"),
+  adminRemoveAthlete: $("#adminRemoveAthlete"),
   addBoatForm: $("#addBoatForm"),
   adminBoatName: $("#adminBoatName"),
   adminBoatSeats: $("#adminBoatSeats"),
   adminBoatStatus: $("#adminBoatStatus"),
+  removeBoatForm: $("#removeBoatForm"),
+  adminRemoveBoat: $("#adminRemoveBoat"),
   boatStatusForm: $("#boatStatusForm"),
   adminStatusBoat: $("#adminStatusBoat"),
   adminStatusValue: $("#adminStatusValue"),
@@ -271,8 +275,7 @@ const els = {
   pickerTitle: $("#pickerTitle"),
   pickerSearch: $("#pickerSearch"),
   pickerList: $("#pickerList"),
-  pickerClose: $("#pickerClose"),
-  resetDemo: $("#resetDemo")
+  pickerClose: $("#pickerClose")
 };
 let activePicker = null;
 
@@ -289,11 +292,12 @@ els.notifyPerson.addEventListener("change", () => {
   localStorage.setItem(NOTIFICATION_USER_KEY, els.notifyPerson.value);
   renderNotificationNotice();
 });
-els.resetDemo.addEventListener("click", resetDemo);
 els.exportLogbook.addEventListener("click", exportLogbookCsv);
 els.adminUnlock.addEventListener("click", unlockAdmin);
 els.addAthleteForm.addEventListener("submit", addAdminAthlete);
+els.removeAthleteForm.addEventListener("submit", removeAdminAthlete);
 els.addBoatForm.addEventListener("submit", addAdminBoat);
+els.removeBoatForm.addEventListener("submit", removeAdminBoat);
 els.boatStatusForm.addEventListener("submit", updateAdminBoatStatus);
 els.pickerClose.addEventListener("click", closePicker);
 els.pickerSearch.addEventListener("input", renderPickerList);
@@ -305,14 +309,17 @@ if ("serviceWorker" in navigator) {
 setInterval(checkLateCrews, 15000);
 render();
 syncFleetFromSheet();
+syncSharedConfig();
 syncSharedOutings();
 pollSharedAlerts();
 setInterval(syncFleetFromSheet, FLEET_SYNC_INTERVAL_MS);
+setInterval(syncSharedConfig, FLEET_SYNC_INTERVAL_MS);
 setInterval(syncSharedOutings, SHARED_SYNC_INTERVAL_MS);
 setInterval(pollSharedAlerts, ALERT_POLL_INTERVAL_MS);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     syncFleetFromSheet();
+    syncSharedConfig();
     syncSharedOutings();
     pollSharedAlerts();
     renderNotificationNotice();
@@ -340,12 +347,40 @@ async function syncSharedOutings() {
     if (!response.ok) throw new Error("Shared outings request failed");
     const payload = await response.json();
     if (!Array.isArray(payload.outings)) return;
-    state.outings = payload.outings;
+    const localBeforeMerge = state.outings;
+    state.outings = mergeOutings(state.outings, payload.outings);
     save();
+    resyncMissingSharedOutings(localBeforeMerge, payload.outings);
     render();
   } catch (error) {
     console.warn("Shared outing sync failed", error);
   }
+}
+
+async function resyncMissingSharedOutings(localOutings = [], sharedOutings = []) {
+  const sharedIds = new Set(sharedOutings.map((outing) => outing.id));
+  const missing = localOutings.filter((outing) => outing?.id && !sharedIds.has(outing.id));
+  for (const outing of missing) {
+    await saveSharedOuting(outing);
+  }
+}
+
+function mergeOutings(localOutings = [], sharedOutings = []) {
+  const byId = new Map();
+  [...localOutings, ...sharedOutings].forEach((outing) => {
+    if (!outing?.id) return;
+    const existing = byId.get(outing.id);
+    byId.set(outing.id, existing ? newestOuting(existing, outing) : outing);
+  });
+  return [...byId.values()].sort((a, b) => new Date(b.outAt || 0) - new Date(a.outAt || 0));
+}
+
+function newestOuting(a, b) {
+  if (b.inAt && !a.inAt) return b;
+  if (a.inAt && !b.inAt) return a;
+  const aUpdated = new Date(a.inAt || a.outAt || 0).getTime();
+  const bUpdated = new Date(b.inAt || b.outAt || 0).getTime();
+  return bUpdated >= aUpdated ? { ...a, ...b } : { ...b, ...a };
 }
 
 async function saveSharedOuting(outing) {
@@ -377,6 +412,57 @@ async function saveSharedSignIn(outing, issueType = "normal") {
     });
   } catch (error) {
     console.warn("Shared sign-in sync failed", error);
+  }
+}
+
+async function syncSharedConfig() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/config`, { cache: "no-store" });
+    if (!response.ok) return;
+    const payload = await response.json();
+    let changed = false;
+    if (Array.isArray(payload.members)) {
+      state.members = mergeMembers(state.members, payload.members, state.removedMembers || []);
+      changed = true;
+    }
+    if (Array.isArray(payload.plant)) {
+      const existingById = new Map(state.plant.map((boat) => [boat.id, boat]));
+      payload.plant.forEach((boat) => existingById.set(boat.id, { ...existingById.get(boat.id), ...boat }));
+      state.plant = [...existingById.values()].filter((boat) => !state.boatOverrides?.[boat.id]?.removed);
+      changed = true;
+    }
+    if (payload.boatOverrides && typeof payload.boatOverrides === "object") {
+      state.boatOverrides = { ...(state.boatOverrides || {}), ...payload.boatOverrides };
+      changed = true;
+    }
+    if (Array.isArray(payload.removedMembers)) {
+      state.removedMembers = [...new Set([...(state.removedMembers || []), ...payload.removedMembers])];
+      state.members = state.members.filter((member) => !state.removedMembers.includes(member.name));
+      changed = true;
+    }
+    if (changed) {
+      save();
+      render();
+    }
+  } catch (error) {
+    console.warn("Shared admin config sync failed", error);
+  }
+}
+
+async function saveSharedConfig() {
+  try {
+    await fetch(`${API_BASE_URL}/api/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        members: state.members,
+        plant: state.plant,
+        boatOverrides: state.boatOverrides || {},
+        removedMembers: state.removedMembers || []
+      })
+    });
+  } catch (error) {
+    console.warn("Shared admin config save failed", error);
   }
 }
 
@@ -415,8 +501,10 @@ async function syncFleetFromSheet() {
     state.plant = liveFleet.map((liveBoat) => {
       const existing = existingById.get(liveBoat.id);
       const override = state.boatOverrides?.[liveBoat.id] || {};
+      if (override.removed) return null;
       return { ...existing, ...liveBoat, ...override };
     }).concat(customBoats);
+    state.plant = state.plant.filter(Boolean);
     save();
     render();
   } catch (error) {
@@ -541,12 +629,14 @@ function freshDemoData() {
   const data = structuredClone(demoData);
   data.plant = data.plant.map((boat) => ({ ...boat, colour: BOAT_COLOURS[boat.id] || "" }));
   data.boatOverrides = {};
+  data.removedMembers = [];
   return data;
 }
 
 function normalizeState(savedState) {
   const merged = { ...freshDemoData(), ...savedState };
-  merged.members = mergeMembers(demoData.members, Array.isArray(merged.members) ? merged.members : []);
+  merged.removedMembers = Array.isArray(merged.removedMembers) ? merged.removedMembers : [];
+  merged.members = mergeMembers(demoData.members, Array.isArray(merged.members) ? merged.members : [], merged.removedMembers);
   merged.boatOverrides = merged.boatOverrides && typeof merged.boatOverrides === "object" ? merged.boatOverrides : {};
   merged.plant = merged.plant
     .filter((item) => item.type === "Boat")
@@ -558,9 +648,11 @@ function normalizeState(savedState) {
   return merged;
 }
 
-function mergeMembers(defaultMembers, savedMembers) {
+function mergeMembers(defaultMembers, savedMembers, removedMembers = []) {
+  const removed = new Set(removedMembers);
   const membersByName = new Map();
   [...defaultMembers, ...savedMembers].forEach((member) => {
+    if (removed.has(member?.name)) return;
     if (!member?.name || membersByName.has(member.name)) return;
     membersByName.set(member.name, member);
   });
@@ -603,10 +695,6 @@ function renderFormOptions() {
   updateBoatSelectColour();
   renderMemberRowsForSelectedBoat();
 
-  if (!els.dueTime.value) {
-    const due = new Date(Date.now() + 90 * 60 * 1000);
-    els.dueTime.value = `${String(due.getHours()).padStart(2, "0")}:${String(due.getMinutes()).padStart(2, "0")}`;
-  }
 }
 
 function isBoatSelectable(boatId, usedIds = activeOutings().map((outing) => outing.boatId)) {
@@ -617,8 +705,7 @@ function isBoatSelectable(boatId, usedIds = activeOutings().map((outing) => outi
 function isSignOutFormActive() {
   if (document.activeElement && els.signOutForm.contains(document.activeElement)) return true;
   return Boolean(
-    els.boatSelect.value ||
-      els.dueTime.value ||
+      els.boatSelect.value ||
       els.notes.value ||
       els.coxSelect.value ||
       getMembersFromForm().length ||
@@ -669,6 +756,7 @@ async function signOut(event) {
     const coxswain = getCoxswainFromForm();
     const captain = getCaptainFromForm();
     if (!boat) throw new Error("Please choose a boat.");
+    if (!els.dueTime.value) throw new Error("Please enter the expected return time.");
     if (!isBoatSignoutReady(boat)) throw new Error("That boat is not available for sign-out.");
     if (members.length < seats) throw new Error("Please choose a rower for every seat in the boat.");
     if (uniqueNames.size !== members.length) throw new Error("Each rower can only be listed once in the boat.");
@@ -850,7 +938,8 @@ function openBoatPicker() {
 function openMemberPicker(row) {
   openPicker({
     title: "Choose rower",
-    placeholder: "Search names",
+    placeholder: "Type a rower name",
+    searchFirst: true,
     items: [
       ...sortedMembers().map((member) => ({
         label: member.name,
@@ -876,7 +965,8 @@ function openMemberPicker(row) {
 function openCoxswainPicker() {
   openPicker({
     title: "Choose coxswain",
-    placeholder: "Search names",
+    placeholder: "Type a coxswain name",
+    searchFirst: true,
     items: [
       ...sortedMembers().map((member) => ({
         label: member.name,
@@ -959,7 +1049,14 @@ function renderPickerList() {
   }
 
   const query = els.pickerSearch.value.trim().toLowerCase();
-  const items = activePicker.items.filter((item) => item.label.toLowerCase().includes(query));
+  const visitorItems = activePicker.items.filter((item) => item.value?.manual);
+  const regularItems = activePicker.items.filter((item) => !item.value?.manual);
+  const items = activePicker.searchFirst && !query
+    ? visitorItems
+    : [
+        ...regularItems.filter((item) => item.label.toLowerCase().includes(query)),
+        ...visitorItems.filter((item) => !query || item.label.toLowerCase().includes(query) || "visitor".includes(query) || "unregistered".includes(query))
+      ];
   els.pickerList.innerHTML = items.length
     ? items
         .map(
@@ -1142,12 +1239,18 @@ function renderLogbook() {
 }
 
 function renderAdmin() {
-  const options = [...state.plant]
+  const boatOptions = [...state.plant]
     .filter((item) => item.type === "Boat")
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((boat) => `<option value="${escapeHtml(boat.id)}">${escapeHtml(boat.name)} - ${escapeHtml(labelStatus(boat.status))}</option>`)
     .join("");
-  els.adminStatusBoat.innerHTML = options;
+  els.adminStatusBoat.innerHTML = boatOptions;
+  els.adminRemoveBoat.innerHTML = boatOptions;
+
+  els.adminRemoveAthlete.innerHTML = [...state.members]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((member) => `<option value="${escapeHtml(member.name)}">${escapeHtml(member.name)}</option>`)
+    .join("");
 }
 
 function unlockAdmin() {
@@ -1157,6 +1260,8 @@ function unlockAdmin() {
   }
   els.adminLogin.hidden = true;
   els.adminTools.hidden = false;
+  els.adminStatus.textContent = "Unlocked";
+  els.adminStatus.classList.add("unlocked");
   els.adminPassword.value = "";
   showAdminMessage("Admin unlocked for this device.", "success");
 }
@@ -1175,9 +1280,25 @@ function addAdminAthlete(event) {
   state.members.push({ name, grade: els.adminAthleteGrade.value });
   state.members = sortedMembers();
   save();
+  saveSharedConfig();
   els.addAthleteForm.reset();
   render();
-  showAdminMessage(`${name} added to the athlete list.`, "success");
+  showAdminMessage(`${name} added. Athlete list now has ${state.members.length} names.`, "success");
+}
+
+function removeAdminAthlete(event) {
+  event.preventDefault();
+  const name = els.adminRemoveAthlete.value;
+  if (!name) {
+    showAdminMessage("Choose an athlete to remove.", "error");
+    return;
+  }
+  state.members = state.members.filter((member) => member.name !== name);
+  state.removedMembers = [...new Set([...(state.removedMembers || []), name])];
+  save();
+  saveSharedConfig();
+  render();
+  showAdminMessage(`${name} removed. Athlete list now has ${state.members.length} names.`, "success");
 }
 
 function addAdminBoat(event) {
@@ -1199,9 +1320,30 @@ function addAdminBoat(event) {
     custom: true
   });
   save();
+  saveSharedConfig();
   els.addBoatForm.reset();
   render();
-  showAdminMessage(`${name} added to the boat list.`, "success");
+  showAdminMessage(`${name} added. Boat list now has ${state.plant.filter((item) => item.type === "Boat").length} boats.`, "success");
+}
+
+function removeAdminBoat(event) {
+  event.preventDefault();
+  const boatId = els.adminRemoveBoat.value;
+  const boat = state.plant.find((item) => item.id === boatId);
+  if (!boat) {
+    showAdminMessage("Choose a boat to remove.", "error");
+    return;
+  }
+  if (activeOutings().some((outing) => outing.boatId === boatId)) {
+    showAdminMessage("That boat is currently on water. Sign it in before removing it.", "error");
+    return;
+  }
+  state.plant = state.plant.filter((item) => item.id !== boatId);
+  state.boatOverrides[boatId] = { removed: true };
+  save();
+  saveSharedConfig();
+  render();
+  showAdminMessage(`${boat.name} removed. Boat list now has ${state.plant.filter((item) => item.type === "Boat").length} boats.`, "success");
 }
 
 function updateAdminBoatStatus(event) {
@@ -1215,6 +1357,7 @@ function updateAdminBoatStatus(event) {
   boat.note = els.adminStatusNote.value.trim();
   state.boatOverrides[boat.id] = { status: boat.status, note: boat.note };
   save();
+  saveSharedConfig();
   updateBoatStatusSheet(boat, boat.status === "damage" ? "Repairs" : labelStatus(boat.status), boat.note);
   render();
   showAdminMessage(`${boat.name} updated to ${labelStatus(boat.status)}.`, "success");
@@ -1234,6 +1377,7 @@ function uniqueBoatId(name, seats) {
 function showAdminMessage(message, type = "") {
   els.adminMessage.textContent = message;
   els.adminMessage.className = `form-message show ${type}`.trim();
+  els.adminMessage.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function logbookPeople(outing) {
@@ -1462,18 +1606,6 @@ function alertPayload(outing) {
 
 function sendPushAlert(payload) {
   sendStressTestAlert(payload);
-
-  if (!PUSH_ALERT_WEBHOOK_URL) {
-    console.info("Push alert webhook not configured", payload);
-    return;
-  }
-
-  fetch(PUSH_ALERT_WEBHOOK_URL, {
-    method: "POST",
-    mode: "no-cors",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(payload)
-  }).catch((error) => console.warn("Push alert failed", error));
 }
 
 async function sendStressTestAlert(payload) {
@@ -1490,30 +1622,28 @@ async function sendStressTestAlert(payload) {
 
 async function pollSharedAlerts() {
   try {
-    const after = localStorage.getItem(`${STORAGE_KEY}-last-alert-at`) || "";
-    const response = await fetch(`${API_BASE_URL}/api/alerts?after=${encodeURIComponent(after)}`, { cache: "no-store" });
+    const response = await fetch(`${API_BASE_URL}/api/alerts`, { cache: "no-store" });
     if (!response.ok) throw new Error("Shared alerts request failed");
     const payload = await response.json();
     const alerts = Array.isArray(payload.alerts) ? payload.alerts : [];
-    if (sharedAlertsPrimed) {
-      alerts.forEach((alert) => {
-        sendNotificationForAlert(alert);
-      });
-    }
-    const latest = alerts.at(-1)?.createdAt;
-    if (latest) localStorage.setItem(`${STORAGE_KEY}-last-alert-at`, latest);
-    sharedAlertsPrimed = true;
+    alerts.forEach((alert) => {
+      const key = alert.key || alert.id || `${alert.type}-${alert.createdAt}`;
+      if (seenAlertKeys.has(key)) return;
+      if (sendNotificationForAlert(alert)) seenAlertKeys.add(key);
+    });
+    localStorage.setItem(SEEN_ALERTS_KEY, JSON.stringify([...seenAlertKeys].slice(-300)));
   } catch (error) {
     console.warn("Shared alert polling failed", error);
   }
 }
 
 function sendNotificationForAlert(alert) {
-  if (!shouldReceiveAlert(alert)) return;
-        sendNotification(alert.title || "Outing Logbook alert", alert.message || "Open Outing Logbook for details.", {
+  if (!shouldReceiveAlert(alert)) return false;
+  sendNotification(alert.title || "Outing Logbook alert", alert.message || "Open Outing Logbook for details.", {
     tag: alert.key || alert.id || alert.type || "water-log-alert",
     requireInteraction: Boolean(alert.requireInteraction)
   });
+  return true;
 }
 
 function shouldReceiveAlert(alert) {
@@ -1557,10 +1687,8 @@ function renderNotificationNotice() {
   }
 
   if (Notification.permission === "granted") {
-    els.notificationNotice.querySelector("p").textContent = pushConfigurationReady()
-      ? "Enabled on this device. This phone can receive Outing Logbook pop-up alerts once registered."
-      : `Enabled for ${notificationUserName() || "this device"}. This device only gets alerts addressed to that person.`;
-    els.enableNotifications.textContent = pushConfigurationReady() ? "Registered" : "Enabled";
+    els.notificationNotice.querySelector("p").textContent = `Enabled for ${notificationUserName() || "this device"}. This device only gets alerts addressed to that person.`;
+    els.enableNotifications.textContent = "Enabled";
     els.enableNotifications.disabled = true;
     return;
   }
@@ -1578,31 +1706,41 @@ function renderNotificationNotice() {
 }
 
 async function registerDeviceForPush() {
-  if (!pushConfigurationReady()) return false;
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+  const publicKey = await getPushPublicKey();
+  if (!publicKey) return false;
 
   const registration = await navigator.serviceWorker.ready;
   const existing = await registration.pushManager.getSubscription();
   const subscription = existing || (await registration.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(PUSH_PUBLIC_VAPID_KEY)
+    applicationServerKey: urlBase64ToUint8Array(publicKey)
   }));
 
-  sendPushSubscription(subscription);
+  await sendPushSubscription(subscription);
   return true;
 }
 
-function pushConfigurationReady() {
-  return Boolean(PUSH_PUBLIC_VAPID_KEY && PUSH_SUBSCRIPTION_WEBHOOK_URL && PUSH_ALERT_WEBHOOK_URL);
+async function getPushPublicKey() {
+  if (pushPublicVapidKey) return pushPublicVapidKey;
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/push/public-key`, { cache: "no-store" });
+    if (!response.ok) return "";
+    const payload = await response.json();
+    pushPublicVapidKey = payload.publicKey || "";
+    return pushPublicVapidKey;
+  } catch {
+    return "";
+  }
 }
 
 function sendPushSubscription(subscription) {
-  fetch(PUSH_SUBSCRIPTION_WEBHOOK_URL, {
+  return fetch(`${API_BASE_URL}/api/push/subscribe`, {
     method: "POST",
-    mode: "no-cors",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       subscription,
+      userName: notificationUserName(),
       app: "Aramoho-Whanganui RC - Outing Logbook",
       registeredAt: new Date().toISOString()
     })
@@ -1755,13 +1893,6 @@ function dateTime(value) {
 
 function csvCell(value) {
   return `"${String(value ?? "").replaceAll('"', '""')}"`;
-}
-
-function resetDemo() {
-  localStorage.removeItem(STORAGE_KEY);
-  state = freshDemoData();
-  els.memberList.innerHTML = "";
-  render();
 }
 
 function escapeHtml(value) {

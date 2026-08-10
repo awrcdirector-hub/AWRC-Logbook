@@ -1,0 +1,373 @@
+﻿[
+  {
+    "row": 3,
+    "plant": "Hammond Family",
+    "type": "8+",
+    "state": "Sweep",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 4,
+    "plant": "Pro8 Weenink",
+    "type": "8+",
+    "state": "Sweep",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 5,
+    "plant": "City College",
+    "type": "8+/x+",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 7,
+    "plant": "Dave Dudley",
+    "type": "4-/4x-",
+    "state": "",
+    "color": "#FFF2CC"
+  },
+  {
+    "row": 8,
+    "plant": "Chris Harris",
+    "type": "4-/4x-",
+    "state": "",
+    "color": "#FFF2CC"
+  },
+  {
+    "row": 9,
+    "plant": "Grader Howells",
+    "type": "4+/4x+",
+    "state": "",
+    "color": "#FFF2CC"
+  },
+  {
+    "row": 10,
+    "plant": "Pawson Family",
+    "type": "4+/4x+",
+    "state": "Scull",
+    "color": "#FFF2CC"
+  },
+  {
+    "row": 11,
+    "plant": "AJ Luff",
+    "type": "4-/4x-",
+    "state": "Sweep",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 12,
+    "plant": "Wayne Jones",
+    "type": "4-/4x-",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 13,
+    "plant": "NZ Centennial",
+    "type": "4-/4x-",
+    "state": "",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 14,
+    "plant": "Les Clark",
+    "type": "4+/4x+",
+    "state": "",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 15,
+    "plant": "Pat Spriggens",
+    "type": "4+/4x+",
+    "state": "",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 16,
+    "plant": "Bruce Gichard",
+    "type": "4+/4x+",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 17,
+    "plant": "City College",
+    "type": "4+/4x+",
+    "state": "Derigged",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 18,
+    "plant": "Wintech",
+    "type": "4+/4x+",
+    "state": "Derigged",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 19,
+    "plant": "Rangiora",
+    "type": "4-",
+    "state": "",
+    "color": "#D9D2E9"
+  },
+  {
+    "row": 20,
+    "plant": "Jo Stewart",
+    "type": "4-/4x-",
+    "state": "",
+    "color": "#D9D2E9"
+  },
+  {
+    "row": 22,
+    "plant": "Filippi (Private)",
+    "type": "2x/2-",
+    "state": "",
+    "color": "#EFEFEF"
+  },
+  {
+    "row": 23,
+    "plant": "Oscar Smith",
+    "type": "2x",
+    "state": "Scull",
+    "color": "#FFF2CC"
+  },
+  {
+    "row": 24,
+    "plant": "Murray Wright",
+    "type": "2x/2-",
+    "state": "Scull",
+    "color": "#FFF2CC"
+  },
+  {
+    "row": 25,
+    "plant": "Wintech",
+    "type": "2x",
+    "state": "",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 26,
+    "plant": "John Symes",
+    "type": "2x/2-",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 27,
+    "plant": "Barb Saunders",
+    "type": "2x/2-",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 28,
+    "plant": "Richard Brock",
+    "type": "2x/2-",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 29,
+    "plant": "Trevor Rush",
+    "type": "2x",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 30,
+    "plant": "Darryl Thompson",
+    "type": "2x",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 31,
+    "plant": "Aramoho Centennial",
+    "type": "2x/2-",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 32,
+    "plant": "City College",
+    "type": "2-/2x",
+    "state": "Derigged",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 33,
+    "plant": "Wintech",
+    "type": "2x/2-",
+    "state": "Repairs",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 34,
+    "plant": "Invercargill",
+    "type": "2x",
+    "state": "",
+    "color": "#D9D2E9"
+  },
+  {
+    "row": 35,
+    "plant": "Diocesan",
+    "type": "2x/2-",
+    "state": "",
+    "color": "#D9D2E9"
+  },
+  {
+    "row": 37,
+    "plant": "Barry Windelburn",
+    "type": "1x",
+    "state": "Scull",
+    "color": "#FFF2CC"
+  },
+  {
+    "row": 38,
+    "plant": "Murray Carey",
+    "type": "1x",
+    "state": "Scull",
+    "color": "#FFF2CC"
+  },
+  {
+    "row": 39,
+    "plant": "Rachel",
+    "type": "1x",
+    "state": "Scull",
+    "color": "#FFF2CC"
+  },
+  {
+    "row": 40,
+    "plant": "Adele Luff",
+    "type": "1x",
+    "state": "Scull",
+    "color": "#FFF2CC"
+  },
+  {
+    "row": 41,
+    "plant": "Tony Upchurch",
+    "type": "1x",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 42,
+    "plant": "Jimmy Jandal",
+    "type": "1x",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 43,
+    "plant": "City College Kirs",
+    "type": "1x",
+    "state": "Repairs",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 44,
+    "plant": "Rua",
+    "type": "1x",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 45,
+    "plant": "Hakuna Matata",
+    "type": "1x",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 46,
+    "plant": "Wintech Yellow",
+    "type": "1x",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 47,
+    "plant": "Wintech Yellow",
+    "type": "1x",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 48,
+    "plant": "Wintech Navy Blue",
+    "type": "1x",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 49,
+    "plant": "Wintech Red",
+    "type": "1x",
+    "state": "Scull",
+    "color": "#F4CCCC"
+  },
+  {
+    "row": 50,
+    "plant": "Brocky Empacher",
+    "type": "1x",
+    "state": "",
+    "color": "#D9D2E9"
+  },
+  {
+    "row": 51,
+    "plant": "Garth Hammond",
+    "type": "1x",
+    "state": "",
+    "color": "#D9D2E9"
+  },
+  {
+    "row": 52,
+    "plant": "Pat Spriggens",
+    "type": "1x",
+    "state": "",
+    "color": "#D9D2E9"
+  },
+  {
+    "row": 53,
+    "plant": "Keith Mayberry",
+    "type": "1x",
+    "state": "",
+    "color": "#D9D2E9"
+  },
+  {
+    "row": 54,
+    "plant": "Nana",
+    "type": "1x",
+    "state": "",
+    "color": "#D9D2E9"
+  },
+  {
+    "row": 55,
+    "plant": "Brenda II",
+    "type": "1x",
+    "state": "",
+    "color": "#D9D2E9"
+  },
+  {
+    "row": 56,
+    "plant": "Brocky Wintech",
+    "type": "1x",
+    "state": "",
+    "color": "#D9D2E9"
+  },
+  {
+    "row": 57,
+    "plant": "Cole's Family",
+    "type": "1x",
+    "state": "",
+    "color": "#D9D2E9"
+  },
+  {
+    "row": 58,
+    "plant": "White KIRS",
+    "type": "1x",
+    "state": "",
+    "color": "#D9D2E9"
+  }
+]
