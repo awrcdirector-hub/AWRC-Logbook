@@ -40,6 +40,16 @@ function defaultState() {
 }
 
 let serverState = defaultState();
+let remoteSaveQueue = Promise.resolve();
+const stateStoreStatus = {
+  configured: Boolean(stateStoreUrl),
+  pending: false,
+  lastLoadAt: "",
+  lastLoadOk: null,
+  lastSaveAt: "",
+  lastSaveOk: null,
+  lastError: ""
+};
 
 function normalizeState(state = {}) {
   const base = defaultState();
@@ -80,7 +90,7 @@ function readState() {
 function writeState(state) {
   serverState = normalizeState(state);
   writeLocalState(serverState);
-  saveRemoteState(serverState);
+  queueRemoteStateSave(serverState);
 }
 
 function stateStoreRequestUrl() {
@@ -93,10 +103,15 @@ async function loadRemoteState() {
   if (!stateStoreUrl) return null;
   try {
     const response = await fetch(stateStoreRequestUrl(), { cache: "no-store" });
-    if (!response.ok) throw new Error(`State store returned ${response.status}`);
-    const payload = await response.json();
+    const payload = await parseStateStoreResponse(response);
+    stateStoreStatus.lastLoadAt = new Date().toISOString();
+    stateStoreStatus.lastLoadOk = true;
+    stateStoreStatus.lastError = "";
     return normalizeState(payload.state || payload);
   } catch (error) {
+    stateStoreStatus.lastLoadAt = new Date().toISOString();
+    stateStoreStatus.lastLoadOk = false;
+    stateStoreStatus.lastError = error.message;
     console.warn("Persistent state load failed; using local fallback", error.message);
     return null;
   }
@@ -110,10 +125,48 @@ async function saveRemoteState(state) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ state })
     });
-    if (!response.ok) throw new Error(`State store returned ${response.status}`);
+    await parseStateStoreResponse(response);
+    stateStoreStatus.lastSaveAt = new Date().toISOString();
+    stateStoreStatus.lastSaveOk = true;
+    stateStoreStatus.lastError = "";
   } catch (error) {
+    stateStoreStatus.lastSaveAt = new Date().toISOString();
+    stateStoreStatus.lastSaveOk = false;
+    stateStoreStatus.lastError = error.message;
     console.warn("Persistent state save failed; local file still updated", error.message);
   }
+}
+
+function queueRemoteStateSave(state) {
+  if (!stateStoreUrl) {
+    stateStoreStatus.configured = false;
+    return;
+  }
+
+  const snapshot = normalizeState(JSON.parse(JSON.stringify(state)));
+  stateStoreStatus.configured = true;
+  stateStoreStatus.pending = true;
+  remoteSaveQueue = remoteSaveQueue
+    .catch(() => {})
+    .then(() => saveRemoteState(snapshot))
+    .finally(() => {
+      stateStoreStatus.pending = false;
+    });
+}
+
+async function parseStateStoreResponse(response) {
+  const text = await response.text();
+  if (!response.ok) throw new Error(`State store returned ${response.status}`);
+
+  let payload = {};
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(`State store did not return JSON: ${text.slice(0, 80)}`);
+  }
+
+  if (payload.error) throw new Error(`State store error: ${payload.error}`);
+  return payload;
 }
 
 function mergeState(localState, remoteState) {
@@ -311,6 +364,11 @@ async function handleApi(request, response, url) {
 
   if (request.method === "GET" && url.pathname === "/api/config") {
     sendJson(response, 200, state.config || defaultState().config);
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/state-store/status") {
+    sendJson(response, 200, stateStoreStatus);
     return;
   }
 
