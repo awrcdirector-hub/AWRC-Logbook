@@ -2,6 +2,7 @@ const STORAGE_KEY = "club-water-log-prototype-v8";
 const NOTIFICATION_USER_KEY = `${STORAGE_KEY}-notification-user`;
 const SEEN_ALERTS_KEY = `${STORAGE_KEY}-seen-alerts`;
 const OVERDUE_GRACE_MINUTES = 30;
+const OVERDUE_REPEAT_MINUTES = 10;
 const FLEET_SYNC_INTERVAL_MS = 60 * 1000;
 const SHARED_SYNC_INTERVAL_MS = 5000;
 const ALERT_POLL_INTERVAL_MS = 5000;
@@ -1581,8 +1582,9 @@ function renderPlant() {
 function checkLateCrews() {
   activeOutings().forEach((outing) => {
     if (!isLate(outing)) return;
-    if (state.notified[outing.id]) return;
-    state.notified[outing.id] = true;
+    const lastSent = new Date(state.notified[outing.id] || 0).getTime();
+    if (lastSent && Date.now() - lastSent < OVERDUE_REPEAT_MINUTES * 60 * 1000) return;
+    state.notified[outing.id] = new Date().toISOString();
     save();
     sendOverdueAlert(outing);
   });
@@ -1595,7 +1597,7 @@ function sendOverdueAlert(outing) {
   const recipients = alertRecipients(outing);
   const message = `${boat} was due back at ${time(outing.dueAt)}. The 30-minute grace period has passed. Alert: ${recipients.join(", ")}.`;
   sendPushAlert({
-    key: `overdue-${outing.id}`,
+    key: `overdue-open-app-${outing.id}-${Date.now()}`,
     type: "overdue",
     title: "Boat overdue",
     message,

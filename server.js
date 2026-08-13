@@ -15,6 +15,7 @@ const stateFile = path.join(dataDir, "stress-test-state.json");
 const stateStoreUrl = process.env.STATE_STORE_URL || "";
 const stateStoreToken = process.env.STATE_STORE_TOKEN || "";
 const overdueGraceMs = 30 * 60 * 1000;
+const overdueRepeatMs = 10 * 60 * 1000;
 const alwaysNotify = ["Axel Dickinson", "Tiffany Davies"];
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || "";
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "";
@@ -246,17 +247,23 @@ function checkOverdueCrews() {
   let changed = false;
 
   state.outings.forEach((outing) => {
-    if (outing.inAt || outing.overdueNotified) return;
+    if (outing.inAt) return;
     if (now <= new Date(outing.dueAt).getTime() + overdueGraceMs) return;
+    const lastSent = new Date(outing.overdueAlertLastSentAt || 0).getTime();
+    if (lastSent && now - lastSent < overdueRepeatMs) return;
 
+    const alertCount = Number(outing.overdueAlertCount || 0) + 1;
     outing.overdueNotified = true;
+    outing.overdueAlertCount = alertCount;
+    outing.overdueAlertLastSentAt = new Date(now).toISOString();
     addAlert(state, {
-      key: `overdue-${outing.id}`,
+      key: `overdue-${outing.id}-${alertCount}`,
       type: "overdue",
       title: "Boat overdue",
-      message: `${outing.boatName || "A boat"} was due back at ${time(outing.dueAt)}. The 30-minute grace period has passed.`,
+      message: `${outing.boatName || "A boat"} was due back at ${time(outing.dueAt)}. The 30-minute grace period has passed. This alert will repeat every 10 minutes until the boat is signed in.`,
       recipients: alertRecipients(outing),
       outingId: outing.id,
+      repeat: alertCount,
       requireInteraction: true
     });
     changed = true;
