@@ -489,7 +489,7 @@ async function startServer() {
   }
 
   server.listen(port, () => {
-    console.log(`Aramoho-Whanganui RC Outing Logbook running at http://localhost:${port}`);
+    console.log(`AWRC Outing Logbook running at http://localhost:${port}`);
     if (stateStoreUrl) console.log("Persistent state store enabled");
   });
 }

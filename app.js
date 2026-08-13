@@ -1826,7 +1826,7 @@ async function sendPushSubscription(subscription) {
     body: JSON.stringify({
       subscription,
       userName: notificationUserName(),
-      app: "Aramoho-Whanganui RC - Outing Logbook",
+      app: "AWRC Outing Logbook",
       registeredAt: new Date().toISOString()
     })
   });

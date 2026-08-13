@@ -1,6 +1,6 @@
 {
-  "name": "Aramoho-Whanganui RC - Outing Logbook",
-  "short_name": "Outing Logbook",
+  "name": "AWRC Outing Logbook",
+  "short_name": "AWRC Logbook",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#edf5f7",
