@@ -195,8 +195,17 @@ function sendWebPushAlert(state, alert) {
   if (!recipients.size) return;
 
   const expiredEndpoints = new Set();
-  const deliveries = (state.subscriptions || [])
-    .filter((item) => recipients.has(item.userName))
+  const latestByRecipient = new Map();
+  (state.subscriptions || [])
+    .filter((item) => recipients.has(item.userName) && item.subscription?.endpoint)
+    .forEach((item) => {
+      const existing = latestByRecipient.get(item.userName);
+      const existingTime = existing ? new Date(existing.updatedAt || existing.createdAt || 0).getTime() : 0;
+      const itemTime = new Date(item.updatedAt || item.createdAt || 0).getTime();
+      if (!existing || itemTime >= existingTime) latestByRecipient.set(item.userName, item);
+    });
+
+  const deliveries = [...latestByRecipient.values()]
     .map((item) =>
       webPush
         .sendNotification(item.subscription, JSON.stringify(alert))
@@ -215,6 +224,12 @@ function sendWebPushAlert(state, alert) {
       writeState(state);
     });
   }
+}
+
+function overdueMinutes(now, dueAt) {
+  const dueTime = new Date(dueAt).getTime();
+  const minutes = Math.floor((now - dueTime) / 60000);
+  return Math.max(30, Math.floor(minutes / 10) * 10);
 }
 
 function mergeConfig(currentConfig = {}, incomingConfig = {}) {
@@ -253,6 +268,7 @@ function checkOverdueCrews() {
     if (lastSent && now - lastSent < overdueRepeatMs) return;
 
     const alertCount = Number(outing.overdueAlertCount || 0) + 1;
+    const minutesLate = overdueMinutes(now, outing.dueAt);
     outing.overdueNotified = true;
     outing.overdueAlertCount = alertCount;
     outing.overdueAlertLastSentAt = new Date(now).toISOString();
@@ -260,9 +276,10 @@ function checkOverdueCrews() {
       key: `overdue-${outing.id}-${alertCount}`,
       type: "overdue",
       title: "Boat overdue",
-      message: `${outing.boatName || "A boat"} was due back at ${time(outing.dueAt)}. The 30-minute grace period has passed. This alert will repeat every 10 minutes until the boat is signed in.`,
+      message: `${outing.boatName || "A boat"} is over ${minutesLate} minutes late getting off the water.`,
       recipients: alertRecipients(outing),
       outingId: outing.id,
+      minutesLate,
       repeat: alertCount,
       requireInteraction: true
     });
@@ -316,12 +333,15 @@ async function handleApi(request, response, url) {
       return;
     }
     const endpoint = body.subscription?.endpoint;
-    state.subscriptions = (state.subscriptions || []).filter((item) => item.subscription?.endpoint !== endpoint);
+    state.subscriptions = (state.subscriptions || []).filter(
+      (item) => item.subscription?.endpoint !== endpoint && item.userName !== body.userName
+    );
     state.subscriptions.push({
       id: randomUUID(),
       userName: body.userName,
       subscription: body.subscription,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     });
     writeState(state);
     sendJson(response, 200, { ok: true });

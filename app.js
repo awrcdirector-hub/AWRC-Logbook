@@ -1776,16 +1776,34 @@ async function registerDeviceForPush() {
   const publicKey = await getPushPublicKey();
   if (!publicKey) return false;
 
-  const registration = await navigator.serviceWorker.ready;
-  const existing = await registration.pushManager.getSubscription();
-  const subscription = existing || (await registration.pushManager.subscribe({
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    subscription = subscription || (await subscribeForPush(registration, publicKey));
+
+    try {
+      await sendPushSubscription(subscription);
+    } catch (error) {
+      console.warn("Push subscription failed; trying a fresh phone registration", error);
+      await subscription.unsubscribe().catch(() => {});
+      subscription = await subscribeForPush(registration, publicKey);
+      await sendPushSubscription(subscription);
+    }
+
+    localStorage.setItem(PUSH_REGISTERED_KEY, "true");
+    return true;
+  } catch (error) {
+    console.warn("Push registration failed", error);
+    localStorage.removeItem(PUSH_REGISTERED_KEY);
+    return false;
+  }
+}
+
+function subscribeForPush(registration, publicKey) {
+  return registration.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(publicKey)
-  }));
-
-  await sendPushSubscription(subscription);
-  localStorage.setItem(PUSH_REGISTERED_KEY, "true");
-  return true;
+  });
 }
 
 async function getPushPublicKey() {
@@ -1801,8 +1819,8 @@ async function getPushPublicKey() {
   }
 }
 
-function sendPushSubscription(subscription) {
-  return fetch(`${API_BASE_URL}/api/push/subscribe`, {
+async function sendPushSubscription(subscription) {
+  const response = await fetch(`${API_BASE_URL}/api/push/subscribe`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1811,7 +1829,8 @@ function sendPushSubscription(subscription) {
       app: "Aramoho-Whanganui RC - Outing Logbook",
       registeredAt: new Date().toISOString()
     })
-  }).catch((error) => console.warn("Push subscription failed", error));
+  });
+  if (!response.ok) throw new Error("Notification registration was not saved.");
 }
 
 function urlBase64ToUint8Array(base64String) {

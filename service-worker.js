@@ -21,7 +21,7 @@ self.addEventListener("push", (event) => {
     body: payload.message || payload.body || "Open Outing Logbook for details.",
     icon: "/awrc-logo.png",
     badge: "/awrc-logo.png",
-    tag: payload.tag || "water-log-alert",
+    tag: payload.tag || payload.key || payload.id || "water-log-alert",
     data: payload.url || "./",
     requireInteraction: Boolean(payload.requireInteraction)
   };
