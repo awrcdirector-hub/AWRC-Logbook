@@ -1,6 +1,7 @@
 const STORAGE_KEY = "club-water-log-prototype-v8";
 const NOTIFICATION_USER_KEY = `${STORAGE_KEY}-notification-user`;
 const SEEN_ALERTS_KEY = `${STORAGE_KEY}-seen-alerts`;
+const PUSH_REGISTERED_KEY = `${STORAGE_KEY}-push-registered`;
 const OVERDUE_GRACE_MINUTES = 30;
 const OVERDUE_REPEAT_MINUTES = 10;
 const FLEET_SYNC_INTERVAL_MS = 60 * 1000;
@@ -787,12 +788,6 @@ async function signOut(event) {
     save();
     saveSharedOuting(outing);
     sendLogbookEvent("signed_out", outing);
-    sendNotificationForAlert({
-      key: `signed-out-${outing.id}`,
-      title: "Boat signed out",
-      message: `${plantName(outing.boatId)} is due back at ${time(outing.dueAt)}.`,
-      recipients: captain.name ? [captain.name] : []
-    });
     showSignOutMessage(`${plantName(outing.boatId)} signed out.`, "success");
     els.signOutForm.reset();
     els.memberList.innerHTML = "";
@@ -1264,20 +1259,12 @@ async function signInCrew(id, issueType = "normal") {
       state.boatOverrides[boat.id] = { status: "damage", note };
       updateBoatStatusSheet(boat, "Repairs", note);
     }
-    if (issueType === "damage") sendDamageAlert(outing, note);
-    if (issueType === "maintenance") sendMaintenanceAlert(outing, note);
   }
 
   save();
   const sharedResult = await saveSharedSignIn(outing, issueType);
   if (sharedResult?.outing) Object.assign(outing, sharedResult.outing);
   sendLogbookEvent(issueType === "normal" ? "signed_in" : `signed_in_${issueType}`, outing);
-    sendNotificationForAlert({
-      key: `signed-in-${outing.id}`,
-      title: "Boat signed in",
-      message: `${plantName(outing.boatId)} returned at ${time(outing.inAt)}.`,
-      recipients: outing.captain?.name ? [outing.captain.name] : []
-    });
   render();
 }
 
@@ -1580,14 +1567,6 @@ function renderPlant() {
 }
 
 function checkLateCrews() {
-  activeOutings().forEach((outing) => {
-    if (!isLate(outing)) return;
-    const lastSent = new Date(state.notified[outing.id] || 0).getTime();
-    if (lastSent && Date.now() - lastSent < OVERDUE_REPEAT_MINUTES * 60 * 1000) return;
-    state.notified[outing.id] = new Date().toISOString();
-    save();
-    sendOverdueAlert(outing);
-  });
   renderLists();
   renderPlant();
 }
@@ -1724,6 +1703,7 @@ async function pollSharedAlerts() {
 }
 
 function sendNotificationForAlert(alert) {
+  if (localStorage.getItem(PUSH_REGISTERED_KEY) === "true") return false;
   if (!shouldReceiveAlert(alert)) return false;
   sendNotification(alert.title || "Outing Logbook alert", alert.message || "Open Outing Logbook for details.", {
     tag: alert.key || alert.id || alert.type || "water-log-alert",
@@ -1804,6 +1784,7 @@ async function registerDeviceForPush() {
   }));
 
   await sendPushSubscription(subscription);
+  localStorage.setItem(PUSH_REGISTERED_KEY, "true");
   return true;
 }
 
@@ -1964,16 +1945,23 @@ function labelStatus(status) {
 }
 
 function time(value) {
-  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(value).toLocaleTimeString("en-NZ", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Pacific/Auckland"
+  });
 }
 
 function dateTime(value) {
   if (!value) return "";
-  return new Date(value).toLocaleString([], {
+  return new Date(value).toLocaleString("en-NZ", {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Pacific/Auckland"
   });
 }
 

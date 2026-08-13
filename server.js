@@ -281,7 +281,12 @@ function captainRecipients(outing) {
 }
 
 function time(value) {
-  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(value).toLocaleTimeString("en-NZ", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Pacific/Auckland"
+  });
 }
 
 async function handleApi(request, response, url) {
