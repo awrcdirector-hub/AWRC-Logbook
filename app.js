@@ -1733,7 +1733,7 @@ async function enableNotifications() {
     return;
   }
 
-  const permission = await Notification.requestPermission();
+  const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
   if (permission === "granted") {
     const pushReady = await registerDeviceForPush();
     const body = pushReady
@@ -1753,9 +1753,16 @@ function renderNotificationNotice() {
   }
 
   if (Notification.permission === "granted") {
-    els.notificationNotice.querySelector("p").textContent = `Enabled for ${notificationUserName() || "this device"}. This device only gets alerts addressed to that person.`;
-    els.enableNotifications.textContent = "Enabled";
-    els.enableNotifications.disabled = true;
+    if (localStorage.getItem(PUSH_REGISTERED_KEY) === "true") {
+      els.notificationNotice.querySelector("p").textContent = `Enabled for ${notificationUserName() || "this device"}. This device only gets alerts addressed to that person.`;
+      els.enableNotifications.textContent = "Enabled";
+      els.enableNotifications.disabled = true;
+      return;
+    }
+
+    els.notificationNotice.querySelector("p").textContent = "Notifications are allowed, but this device still needs to be registered for phone push alerts. Tap Enable once more.";
+    els.enableNotifications.textContent = "Enable";
+    els.enableNotifications.disabled = false;
     return;
   }
 
@@ -1777,7 +1784,9 @@ async function registerDeviceForPush() {
   if (!publicKey) return false;
 
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await navigator.serviceWorker.register("service-worker.js");
+    await registration.update().catch(() => {});
+    await navigator.serviceWorker.ready;
     let subscription = await registration.pushManager.getSubscription();
     subscription = subscription || (await subscribeForPush(registration, publicKey));
 

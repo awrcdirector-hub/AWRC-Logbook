@@ -384,6 +384,18 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/push/status") {
+    const subscriptions = state.subscriptions || [];
+    const userName = url.searchParams.get("userName") || "";
+    sendJson(response, 200, {
+      configured: Boolean(webPush && vapidPublicKey && vapidPrivateKey),
+      subscriptionCount: subscriptions.length,
+      users: [...new Set(subscriptions.map((item) => item.userName).filter(Boolean))].sort(),
+      userRegistered: userName ? subscriptions.some((item) => item.userName === userName && item.subscription?.endpoint) : null
+    });
+    return;
+  }
+
   if (request.method === "POST" && url.pathname === "/api/push/subscribe") {
     const body = await readBody(request);
     if (!body.userName || !body.subscription) {

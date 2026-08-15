@@ -1,6 +1,8 @@
 const STATE_SHEET = "State";
 const OUTINGS_SHEET = "Outings";
 const TOKEN = "2852";
+const STATE_START_ROW = 2;
+const STATE_CHUNK_SIZE = 45000;
 
 function doGet(e) {
   if (!isAllowed(e)) return json({ error: "Unauthorized" });
@@ -19,7 +21,13 @@ function doPost(e) {
 
 function readState() {
   const sheet = getSheet(STATE_SHEET);
-  const raw = sheet.getRange("A2").getValue();
+  const lastRow = Math.max(sheet.getLastRow(), STATE_START_ROW);
+  const chunkCount = Math.max(1, lastRow - STATE_START_ROW + 1);
+  const raw = sheet
+    .getRange(STATE_START_ROW, 1, chunkCount, 1)
+    .getValues()
+    .map((row) => row[0] || "")
+    .join("");
   if (!raw) {
     return {
       outings: [],
@@ -38,10 +46,23 @@ function readState() {
 
 function writeState(state) {
   const sheet = getSheet(STATE_SHEET);
+  const raw = JSON.stringify(state);
+  const chunks = [];
+  for (let index = 0; index < raw.length; index += STATE_CHUNK_SIZE) {
+    chunks.push([raw.slice(index, index + STATE_CHUNK_SIZE)]);
+  }
+
   sheet.getRange("A1").setValue("app_state_json");
-  sheet.getRange("A2").setValue(JSON.stringify(state));
+  if (sheet.getLastRow() >= STATE_START_ROW) {
+    sheet.getRange(STATE_START_ROW, 1, sheet.getLastRow() - STATE_START_ROW + 1, 1).clearContent();
+  }
+  if (chunks.length) {
+    sheet.getRange(STATE_START_ROW, 1, chunks.length, 1).setValues(chunks);
+  }
   sheet.getRange("B1").setValue("updated");
   sheet.getRange("B2").setValue(new Date());
+  sheet.getRange("C1").setValue("state_chunks");
+  sheet.getRange("C2").setValue(chunks.length);
 }
 
 function writeOutingsLog(state) {
