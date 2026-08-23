@@ -661,7 +661,7 @@ function preferredBoatColour(boat) {
   if (!boat) return "";
   const name = boat.name || "";
   if (BOAT_COLOURS[boat.id]) return BOAT_COLOURS[boat.id];
-  if (/^coach boat\b/i.test(name)) return "#000000";
+  if (isCoachBoat(boat)) return "#000000";
   if (/^wintech\s*\(2x\/2-\)/i.test(name)) return "#F4CCCC";
   if (/^new 1x\b/i.test(name)) return "#FFF2CC";
   if (HULL_TYPE_COLOURS[boat.hullType]) return HULL_TYPE_COLOURS[boat.hullType];
@@ -957,10 +957,8 @@ function openBoatPicker() {
   openPicker({
     title: "Choose boat",
     placeholder: "Search boats",
-    items: state.plant
-      .filter((item) => item.type === "Boat")
+    items: sortedBoats()
       .filter((item) => isBoatSelectable(item.id))
-      .sort((a, b) => a.name.localeCompare(b.name))
       .map((boat) => ({
         label: boat.name,
         detail: boat.note || labelStatus(boat.status),
@@ -1093,7 +1091,51 @@ function sortedMembers() {
 function sortedBoats() {
   return [...state.plant]
     .filter((item) => item.type === "Boat")
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort(compareBoats);
+}
+
+function compareBoats(a, b) {
+  return boatTypeRank(a) - boatTypeRank(b)
+    || hullTypeRank(a) - hullTypeRank(b)
+    || a.name.localeCompare(b.name);
+}
+
+function boatTypeRank(boat) {
+  if (isCoachBoat(boat)) return 900;
+  const type = boatTypeText(boat);
+  const seats = boat.seats || inferSeatCount(boat.name);
+
+  if (type.includes("8")) return 10;
+  if (type.includes("4-") || type.includes("4x-")) return 20;
+  if (type.includes("4+") || type.includes("4x+")) return 30;
+  if (seats === 4) return 35;
+  if (type.includes("2-") || type.includes("2x/2-") || type.includes("2-/2x")) return 40;
+  if (type.includes("2x")) return 45;
+  if (seats === 2) return 50;
+  if (type.includes("1x") || seats === 1) return 70;
+  return 800;
+}
+
+function hullTypeRank(boat) {
+  if (isCoachBoat(boat)) return 99;
+  if (boat.hullType === "racing") return 0;
+  if (boat.hullType === "training") return 1;
+  if (boat.hullType === "private") return 2;
+
+  const colour = preferredBoatColour(boat);
+  if (colour === HULL_TYPE_COLOURS.racing) return 0;
+  if (colour === HULL_TYPE_COLOURS.training) return 1;
+  if (colour === HULL_TYPE_COLOURS.private) return 2;
+  return 3;
+}
+
+function boatTypeText(boat) {
+  const match = (boat.name || "").match(/\(([^)]+)\)/);
+  return (match ? match[1] : boat.name || "").toLowerCase().replace(/\s+/g, "");
+}
+
+function isCoachBoat(boat) {
+  return /^coach boat\b/i.test(boat?.name || "");
 }
 
 function openPicker(config) {
@@ -1585,7 +1627,7 @@ function visitorNames(outing) {
 function renderPlant() {
   const usedIds = activeOutings().map((outing) => outing.boatId);
   els.plantList.innerHTML = "";
-  state.plant.filter((item) => item.type === "Boat").forEach((item) => {
+  sortedBoats().forEach((item) => {
     const status = usedIds.includes(item.id) ? "used" : item.status;
     const card = document.createElement("article");
     card.className = "card";
