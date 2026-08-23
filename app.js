@@ -20,8 +20,8 @@ const ALERT_ROLES = {
   alwaysNotify: ["Axel Dickinson", "Tiffany Davies"]
 };
 const HULL_TYPE_COLOURS = {
-  racing: "#F4CCCC",
-  training: "#FFF2CC",
+  racing: "#FFF2CC",
+  training: "#F4CCCC",
   private: "#D9D2E9"
 };
 const BOAT_COLOURS = {
@@ -662,6 +662,8 @@ function preferredBoatColour(boat) {
   const name = boat.name || "";
   if (BOAT_COLOURS[boat.id]) return BOAT_COLOURS[boat.id];
   if (/^coach boat\b/i.test(name)) return "#000000";
+  if (/^wintech\s*\(2x\/2-\)/i.test(name)) return "#F4CCCC";
+  if (/^new 1x\b/i.test(name)) return "#FFF2CC";
   if (HULL_TYPE_COLOURS[boat.hullType]) return HULL_TYPE_COLOURS[boat.hullType];
   if (/^bruce slr\b/i.test(name) || /^searite\b/i.test(name)) return "#D9D2E9";
   return boat.colour || "";
