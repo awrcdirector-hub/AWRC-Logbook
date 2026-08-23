@@ -2,6 +2,7 @@ const STORAGE_KEY = "club-water-log-prototype-v8";
 const NOTIFICATION_USER_KEY = `${STORAGE_KEY}-notification-user`;
 const SEEN_ALERTS_KEY = `${STORAGE_KEY}-seen-alerts`;
 const PUSH_REGISTERED_KEY = `${STORAGE_KEY}-push-registered`;
+const PUSH_REGISTERED_USER_KEY = `${STORAGE_KEY}-push-registered-user`;
 const OVERDUE_GRACE_MINUTES = 30;
 const OVERDUE_REPEAT_MINUTES = 10;
 const FLEET_SYNC_INTERVAL_MS = 60 * 1000;
@@ -17,6 +18,11 @@ const ALERT_ROLES = {
   coaches: ["Axel Dickinson", "Allan Luff"],
   safetyOfficer: "Axel Dickinson",
   alwaysNotify: ["Axel Dickinson", "Tiffany Davies"]
+};
+const HULL_TYPE_COLOURS = {
+  racing: "#F4CCCC",
+  training: "#FFF2CC",
+  private: "#D9D2E9"
 };
 const BOAT_COLOURS = {
   "hammond-family-8": "#F4CCCC",
@@ -64,6 +70,8 @@ const BOAT_COLOURS = {
   "wintech-navy-blue-1": "#F4CCCC",
   "wintech-red-1": "#F4CCCC",
   "brocky-empacher-1": "#D9D2E9",
+  "bruce-slr-1x-1": "#D9D2E9",
+  "searite-1x-1": "#D9D2E9",
   "garth-hammond-1": "#D9D2E9",
   "pat-spriggens-1": "#D9D2E9",
   "keith-mayberry-1": "#D9D2E9",
@@ -71,7 +79,12 @@ const BOAT_COLOURS = {
   "brenda-ii-1": "#D9D2E9",
   "brocky-wintech-1": "#D9D2E9",
   "coles-family-1": "#D9D2E9",
-  "white-kirs-1": "#D9D2E9"
+  "white-kirs-1": "#D9D2E9",
+  "coach-boat-1-1": "#000000",
+  "coach-boat-2-1": "#000000",
+  "coach-boat-3-1": "#000000",
+  "coach-boat-4-1": "#000000",
+  "coach-boat-5-1": "#000000"
 };
 
 const demoData = {
@@ -262,6 +275,7 @@ const els = {
   addBoatForm: $("#addBoatForm"),
   adminBoatName: $("#adminBoatName"),
   adminBoatSeats: $("#adminBoatSeats"),
+  adminBoatHullType: $("#adminBoatHullType"),
   adminBoatStatus: $("#adminBoatStatus"),
   removeBoatForm: $("#removeBoatForm"),
   adminRemoveBoat: $("#adminRemoveBoat"),
@@ -438,8 +452,10 @@ async function syncSharedConfig() {
     }
     if (Array.isArray(payload.plant)) {
       const existingById = new Map(state.plant.map((boat) => [boat.id, boat]));
-      payload.plant.forEach((boat) => existingById.set(boat.id, { ...existingById.get(boat.id), ...boat }));
-      state.plant = [...existingById.values()].filter((boat) => !state.boatOverrides?.[boat.id]?.removed);
+      payload.plant.forEach((boat) => existingById.set(boat.id, applyBoatColour({ ...existingById.get(boat.id), ...boat })));
+      state.plant = [...existingById.values()]
+        .filter((boat) => !state.boatOverrides?.[boat.id]?.removed)
+        .map(applyBoatColour);
       changed = true;
     }
     if (payload.boatOverrides && typeof payload.boatOverrides === "object") {
@@ -513,9 +529,9 @@ async function syncFleetFromSheet() {
       const existing = existingById.get(liveBoat.id);
       const override = state.boatOverrides?.[liveBoat.id] || {};
       if (override.removed) return null;
-      return { ...existing, ...liveBoat, ...override };
-    }).concat(customBoats);
-    state.plant = state.plant.filter(Boolean);
+      return applyBoatColour({ ...existing, ...liveBoat, ...override });
+    }).concat(customBoats.map(applyBoatColour));
+    state.plant = state.plant.filter(Boolean).map(applyBoatColour);
     save();
     render();
   } catch (error) {
@@ -636,9 +652,24 @@ function slugify(value) {
     .replace(/^-+|-+$/g, "");
 }
 
+function applyBoatColour(boat) {
+  if (!boat) return boat;
+  return { ...boat, colour: preferredBoatColour(boat) };
+}
+
+function preferredBoatColour(boat) {
+  if (!boat) return "";
+  const name = boat.name || "";
+  if (BOAT_COLOURS[boat.id]) return BOAT_COLOURS[boat.id];
+  if (/^coach boat\b/i.test(name)) return "#000000";
+  if (HULL_TYPE_COLOURS[boat.hullType]) return HULL_TYPE_COLOURS[boat.hullType];
+  if (/^bruce slr\b/i.test(name) || /^searite\b/i.test(name)) return "#D9D2E9";
+  return boat.colour || "";
+}
+
 function freshDemoData() {
   const data = structuredClone(demoData);
-  data.plant = data.plant.map((boat) => ({ ...boat, colour: BOAT_COLOURS[boat.id] || "" }));
+  data.plant = data.plant.map(applyBoatColour);
   data.boatOverrides = {};
   data.removedMembers = [];
   return data;
@@ -651,7 +682,7 @@ function normalizeState(savedState) {
   merged.boatOverrides = merged.boatOverrides && typeof merged.boatOverrides === "object" ? merged.boatOverrides : {};
   merged.plant = merged.plant
     .filter((item) => item.type === "Boat")
-    .map((item) => ({ ...item, seats: item.seats || inferSeatCount(item.name), colour: item.colour || BOAT_COLOURS[item.id] || "" }));
+    .map((item) => applyBoatColour({ ...item, seats: item.seats || inferSeatCount(item.name) }));
   merged.outings = merged.outings.map((outing) => ({
     ...outing,
     members: Array.isArray(outing.members) ? outing.members : []
@@ -734,6 +765,7 @@ function boatStatusSuffix(status) {
 function updateBoatSelectColour() {
   const colour = selectedBoat()?.colour || "#ffffff";
   els.boatSearch.style.backgroundColor = colour;
+  els.boatSearch.style.color = isDarkColour(colour) ? "#ffffff" : "";
 }
 
 function chooseBoat(boat) {
@@ -999,9 +1031,14 @@ function openNotificationPersonPicker() {
       value: member
     })),
     onSelect: (member) => {
+      const previousName = notificationUserName();
       els.notifyPerson.value = member.name;
       els.notifyPersonSearch.textContent = member.name;
       localStorage.setItem(NOTIFICATION_USER_KEY, member.name);
+      if (previousName && previousName !== member.name) {
+        localStorage.removeItem(PUSH_REGISTERED_KEY);
+        localStorage.removeItem(PUSH_REGISTERED_USER_KEY);
+      }
       renderNotificationNotice();
       return true;
     }
@@ -1378,17 +1415,18 @@ function addAdminBoat(event) {
     showAdminMessage("Enter a boat name.", "error");
     return;
   }
+  const hullType = els.adminBoatHullType.value || "racing";
   const id = uniqueBoatId(name, els.adminBoatSeats.value);
-  state.plant.push({
+  state.plant.push(applyBoatColour({
     id,
     type: "Boat",
     name,
     seats: Number(els.adminBoatSeats.value),
+    hullType,
     status: els.adminBoatStatus.value,
     note: "",
-    colour: "",
     custom: true
-  });
+  }));
   save();
   saveSharedConfig();
   els.addBoatForm.reset();
@@ -1703,7 +1741,7 @@ async function pollSharedAlerts() {
 }
 
 function sendNotificationForAlert(alert) {
-  if (localStorage.getItem(PUSH_REGISTERED_KEY) === "true") return false;
+  if (isPushRegisteredForCurrentUser()) return false;
   if (!shouldReceiveAlert(alert)) return false;
   sendNotification(alert.title || "Outing Logbook alert", alert.message || "Open Outing Logbook for details.", {
     tag: alert.key || alert.id || alert.type || "water-log-alert",
@@ -1721,6 +1759,11 @@ function shouldReceiveAlert(alert) {
 
 function notificationUserName() {
   return els.notifyPerson?.value || localStorage.getItem(NOTIFICATION_USER_KEY) || "";
+}
+
+function isPushRegisteredForCurrentUser() {
+  return localStorage.getItem(PUSH_REGISTERED_KEY) === "true"
+    && localStorage.getItem(PUSH_REGISTERED_USER_KEY) === notificationUserName();
 }
 
 async function enableNotifications() {
@@ -1753,7 +1796,7 @@ function renderNotificationNotice() {
   }
 
   if (Notification.permission === "granted") {
-    if (localStorage.getItem(PUSH_REGISTERED_KEY) === "true") {
+    if (isPushRegisteredForCurrentUser()) {
       els.notificationNotice.querySelector("p").textContent = `Enabled for ${notificationUserName() || "this device"}. This device only gets alerts addressed to that person.`;
       els.enableNotifications.textContent = "Enabled";
       els.enableNotifications.disabled = true;
@@ -1782,6 +1825,8 @@ async function registerDeviceForPush() {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
   const publicKey = await getPushPublicKey();
   if (!publicKey) return false;
+  const userName = notificationUserName();
+  if (!userName) return false;
 
   try {
     const registration = await navigator.serviceWorker.register("service-worker.js");
@@ -1791,19 +1836,21 @@ async function registerDeviceForPush() {
     subscription = subscription || (await subscribeForPush(registration, publicKey));
 
     try {
-      await sendPushSubscription(subscription);
+      await sendPushSubscription(subscription, userName);
     } catch (error) {
       console.warn("Push subscription failed; trying a fresh phone registration", error);
       await subscription.unsubscribe().catch(() => {});
       subscription = await subscribeForPush(registration, publicKey);
-      await sendPushSubscription(subscription);
+      await sendPushSubscription(subscription, userName);
     }
 
     localStorage.setItem(PUSH_REGISTERED_KEY, "true");
+    localStorage.setItem(PUSH_REGISTERED_USER_KEY, userName);
     return true;
   } catch (error) {
     console.warn("Push registration failed", error);
     localStorage.removeItem(PUSH_REGISTERED_KEY);
+    localStorage.removeItem(PUSH_REGISTERED_USER_KEY);
     return false;
   }
 }
@@ -1828,13 +1875,13 @@ async function getPushPublicKey() {
   }
 }
 
-async function sendPushSubscription(subscription) {
+async function sendPushSubscription(subscription, userName) {
   const response = await fetch(`${API_BASE_URL}/api/push/subscribe`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       subscription,
-      userName: notificationUserName(),
+      userName,
       app: "AWRC Outing Logbook",
       registeredAt: new Date().toISOString()
     })
@@ -1893,7 +1940,18 @@ function plantName(id) {
 }
 
 function selectedBoatColour(id) {
-  return state.plant.find((item) => item.id === id)?.colour || BOAT_COLOURS[id] || "";
+  return preferredBoatColour(state.plant.find((item) => item.id === id)) || BOAT_COLOURS[id] || "";
+}
+
+function isDarkColour(colour) {
+  if (!colour || !colour.startsWith("#")) return false;
+  const hex = colour.replace("#", "");
+  const fullHex = hex.length === 3 ? [...hex].map((char) => char + char).join("") : hex;
+  if (fullHex.length !== 6) return false;
+  const red = parseInt(fullHex.slice(0, 2), 16);
+  const green = parseInt(fullHex.slice(2, 4), 16);
+  const blue = parseInt(fullHex.slice(4, 6), 16);
+  return (red * 299 + green * 587 + blue * 114) / 1000 < 120;
 }
 
 function selectedBoat() {

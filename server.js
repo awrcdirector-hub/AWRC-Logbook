@@ -414,7 +414,7 @@ async function handleApi(request, response, url) {
       updatedAt: new Date().toISOString()
     });
     writeState(state);
-    sendJson(response, 200, { ok: true });
+    sendJson(response, 200, { ok: true, userName: body.userName, subscriptionCount: state.subscriptions.length });
     return;
   }
 
