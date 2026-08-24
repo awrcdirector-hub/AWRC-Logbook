@@ -63,6 +63,7 @@ function writeState(state) {
   sheet.getRange("B2").setValue(new Date());
   sheet.getRange("C1").setValue("state_chunks");
   sheet.getRange("C2").setValue(chunks.length);
+  formatStateSheet(sheet, Math.max(chunks.length + 1, 2));
 }
 
 function writeOutingsLog(state) {
@@ -120,7 +121,64 @@ function writeOutingsLog(state) {
     sheet.getRange(2, 1, rows.length, headings.length).setValues(rows);
   }
   sheet.setFrozenRows(1);
-  sheet.autoResizeColumns(1, headings.length);
+  formatOutingsSheet(sheet, headings.length, rows.length + 1);
+}
+
+function formatOutingsSheet(sheet, columnCount, rowCount) {
+  const usedRows = Math.max(rowCount, 1);
+  const range = sheet.getRange(1, 1, usedRows, columnCount);
+
+  range
+    .setFontFamily("Nunito")
+    .setVerticalAlignment("middle")
+    .setWrap(true);
+
+  sheet.getRange(1, 1, 1, columnCount).setFontWeight("bold");
+  sheet.autoResizeColumns(1, columnCount);
+  sheet.autoResizeRows(1, usedRows);
+
+  for (let column = 1; column <= columnCount; column += 1) {
+    const currentWidth = sheet.getColumnWidth(column);
+    sheet.setColumnWidth(column, Math.max(110, Math.ceil(currentWidth * 1.1)));
+  }
+
+  for (let row = 1; row <= usedRows; row += 1) {
+    const currentHeight = sheet.getRowHeight(row);
+    sheet.setRowHeight(row, Math.max(26, Math.ceil(currentHeight * 1.1)));
+  }
+}
+
+function formatStateSheet(sheet, rowCount) {
+  const usedRows = Math.max(rowCount, 2);
+  const range = sheet.getRange(1, 1, usedRows, 3);
+
+  range
+    .setFontFamily("Nunito")
+    .setVerticalAlignment("middle")
+    .setWrap(true);
+
+  sheet.getRange(1, 1, 1, 3).setFontWeight("bold");
+  sheet.autoResizeColumns(1, 3);
+  sheet.autoResizeRows(1, usedRows);
+
+  for (let column = 1; column <= 3; column += 1) {
+    const currentWidth = sheet.getColumnWidth(column);
+    sheet.setColumnWidth(column, Math.max(130, Math.ceil(currentWidth * 1.1)));
+  }
+
+  for (let row = 1; row <= usedRows; row += 1) {
+    const currentHeight = sheet.getRowHeight(row);
+    sheet.setRowHeight(row, Math.max(30, Math.ceil(currentHeight * 1.1)));
+  }
+}
+
+function formatSheetsNow() {
+  const state = readState();
+  const stateSheet = getSheet(STATE_SHEET);
+  const stateRows = Math.max(stateSheet.getLastRow(), STATE_START_ROW);
+
+  formatStateSheet(stateSheet, stateRows);
+  writeOutingsLog(state);
 }
 
 function names(people) {
