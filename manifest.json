@@ -7,7 +7,7 @@
   "theme_color": "#0f6f7d",
   "icons": [
     {
-      "src": "/awrc-logo.png",
+      "src": "/logbook-icon.png",
       "sizes": "192x192 512x512",
       "type": "image/png",
       "purpose": "any"

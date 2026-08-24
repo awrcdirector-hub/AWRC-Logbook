@@ -1947,8 +1947,8 @@ function sendNotification(title, body, options = {}) {
     navigator.serviceWorker.ready
       .then((registration) => registration.showNotification(title, {
         body,
-        icon: "/awrc-logo.png",
-        badge: "/awrc-logo.png",
+        icon: "/logbook-icon.png",
+        badge: "/logbook-icon.png",
         tag: options.tag || title,
         requireInteraction: Boolean(options.requireInteraction)
       }))
@@ -1961,7 +1961,7 @@ function sendNotification(title, body, options = {}) {
 function showWindowNotification(title, body, options = {}) {
   new Notification(title, {
     body,
-    icon: "/awrc-logo.png",
+    icon: "/logbook-icon.png",
     tag: options.tag || title,
     requireInteraction: Boolean(options.requireInteraction)
   });
