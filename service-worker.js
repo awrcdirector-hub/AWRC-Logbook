@@ -19,8 +19,8 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Outing Logbook alert";
   const options = {
     body: payload.message || payload.body || "Open Outing Logbook for details.",
-    icon: "/logbook-icon-v10.png",
-    badge: "/logbook-icon-v10.png",
+    icon: "/logbook-browser-icon-v11.png",
+    badge: "/logbook-browser-icon-v11.png",
     tag: payload.tag || payload.key || payload.id || "water-log-alert",
     data: payload.url || "./",
     requireInteraction: Boolean(payload.requireInteraction)
