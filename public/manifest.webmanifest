@@ -1,0 +1,43 @@
+{
+  "name": "AWRC Training Signup",
+  "short_name": "Training Signup",
+  "description": "Training session signup and attendance tracking for Aramoho-Whanganui Rowing Club.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#edf5f7",
+  "theme_color": "#0a4c56",
+  "orientation": "portrait-primary",
+  "categories": ["sports", "productivity"],
+  "icons": [
+    {
+      "src": "/awrc-icon-transparent-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/awrc-icon-transparent-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Athlete Signup",
+      "short_name": "Athlete",
+      "description": "Open the athlete signup area.",
+      "url": "/?view=athlete",
+      "icons": [{ "src": "/awrc-icon-transparent-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Coach Tools",
+      "short_name": "Coach",
+      "description": "Open the coach tools.",
+      "url": "/?view=coach",
+      "icons": [{ "src": "/awrc-icon-transparent-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
