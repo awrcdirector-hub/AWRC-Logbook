@@ -66,6 +66,7 @@ button {
   margin: 0 0 3px;
   color: var(--water-dark);
   font-weight: 800;
+  text-transform: uppercase;
 }
 
 h1,
@@ -77,6 +78,7 @@ p {
 h1 {
   max-width: 680px;
   font-size: 3rem;
+  font-weight: 900;
   line-height: 0.98;
 }
 
