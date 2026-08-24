@@ -7,7 +7,7 @@
   "theme_color": "#0f6f7d",
   "icons": [
     {
-      "src": "/logbook-icon-v6.png",
+      "src": "/logbook-icon-v9.png",
       "sizes": "192x192 512x512",
       "type": "image/png",
       "purpose": "any"
