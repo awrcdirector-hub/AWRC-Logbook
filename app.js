@@ -1785,13 +1785,7 @@ async function pollSharedAlerts() {
 }
 
 function sendNotificationForAlert(alert) {
-  if (isPushRegisteredForCurrentUser()) return false;
-  if (!shouldReceiveAlert(alert)) return false;
-  sendNotification(alert.title || "Outing Logbook alert", alert.message || "Open Outing Logbook for details.", {
-    tag: alert.key || alert.id || alert.type || "water-log-alert",
-    requireInteraction: Boolean(alert.requireInteraction)
-  });
-  return true;
+  return shouldReceiveAlert(alert);
 }
 
 function shouldReceiveAlert(alert) {
@@ -1811,99 +1805,23 @@ function isPushRegisteredForCurrentUser() {
 }
 
 async function enableNotifications() {
-  if (!("Notification" in window)) {
-    alert("This browser does not support notifications.");
-    return;
-  }
-  if (!notificationUserName()) {
-    alert("Please choose who this device belongs to before enabling notifications.");
-    return;
-  }
-
-  const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
-  if (permission === "granted") {
-    const pushReady = await registerDeviceForPush();
-    const body = pushReady
-      ? "This device is registered for Outing Logbook phone pop-up alerts."
-      : "This device can show Outing Logbook pop-up alerts while the app is open.";
-    sendNotification("Notifications enabled", body);
-  }
-  renderNotificationNotice();
+  window.open("https://awrc-hub.onrender.com/#", "_blank", "noopener");
 }
 
 function renderNotificationNotice() {
-  if (!("Notification" in window)) {
-    els.notificationNotice.querySelector("p").textContent = "This browser does not support notifications.";
-    els.enableNotifications.textContent = "Unavailable";
-    els.enableNotifications.disabled = true;
-    return;
-  }
-
-  if (Notification.permission === "granted") {
-    if (isPushRegisteredForCurrentUser()) {
-      els.notificationNotice.querySelector("p").textContent = `Enabled for ${notificationUserName() || "this device"}. This device only gets alerts addressed to that person.`;
-      els.enableNotifications.textContent = "Enabled";
-      els.enableNotifications.disabled = true;
-      return;
-    }
-
-    els.notificationNotice.querySelector("p").textContent = "Notifications are allowed, but this device still needs to be registered for phone push alerts. Tap Enable once more.";
-    els.enableNotifications.textContent = "Enable";
-    els.enableNotifications.disabled = false;
-    return;
-  }
-
-  if (Notification.permission === "denied") {
-    els.notificationNotice.querySelector("p").textContent = "Notifications are blocked for this page. Change the browser site settings to allow them.";
-    els.enableNotifications.textContent = "Blocked";
-    els.enableNotifications.disabled = true;
-    return;
-  }
-
-  els.notificationNotice.querySelector("p").textContent = "Choose your name, then tap Enable once. Captains only get alerts for their own boat. Coaches and the safety officer get late and damage alerts.";
-  els.enableNotifications.textContent = "Enable";
+  els.notificationNotice.querySelector("p").textContent = "Phone notifications are managed through AWRC Hub so each member only registers one device pathway.";
+  els.enableNotifications.textContent = "Open Hub";
   els.enableNotifications.disabled = false;
 }
 
 async function registerDeviceForPush() {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
-  const publicKey = await getPushPublicKey();
-  if (!publicKey) return false;
-  const userName = notificationUserName();
-  if (!userName) return false;
-
-  try {
-    const registration = await navigator.serviceWorker.register("service-worker.js");
-    await registration.update().catch(() => {});
-    await navigator.serviceWorker.ready;
-    let subscription = await registration.pushManager.getSubscription();
-    subscription = subscription || (await subscribeForPush(registration, publicKey));
-
-    try {
-      await sendPushSubscription(subscription, userName);
-    } catch (error) {
-      console.warn("Push subscription failed; trying a fresh phone registration", error);
-      await subscription.unsubscribe().catch(() => {});
-      subscription = await subscribeForPush(registration, publicKey);
-      await sendPushSubscription(subscription, userName);
-    }
-
-    localStorage.setItem(PUSH_REGISTERED_KEY, "true");
-    localStorage.setItem(PUSH_REGISTERED_USER_KEY, userName);
-    return true;
-  } catch (error) {
-    console.warn("Push registration failed", error);
-    localStorage.removeItem(PUSH_REGISTERED_KEY);
-    localStorage.removeItem(PUSH_REGISTERED_USER_KEY);
-    return false;
-  }
+  return false;
 }
 
 function subscribeForPush(registration, publicKey) {
-  return registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(publicKey)
-  });
+  void registration;
+  void publicKey;
+  return null;
 }
 
 async function getPushPublicKey() {
@@ -1920,17 +1838,9 @@ async function getPushPublicKey() {
 }
 
 async function sendPushSubscription(subscription, userName) {
-  const response = await fetch(`${API_BASE_URL}/api/push/subscribe`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      subscription,
-      userName,
-      app: "AWRC Outing Logbook",
-      registeredAt: new Date().toISOString()
-    })
-  });
-  if (!response.ok) throw new Error("Notification registration was not saved.");
+  void subscription;
+  void userName;
+  return false;
 }
 
 function urlBase64ToUint8Array(base64String) {
@@ -1941,30 +1851,15 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 function sendNotification(title, body, options = {}) {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.ready
-      .then((registration) => registration.showNotification(title, {
-        body,
-        icon: "/logbook-browser-icon-v11.png",
-        badge: "/logbook-browser-icon-v11.png",
-        tag: options.tag || title,
-        requireInteraction: Boolean(options.requireInteraction)
-      }))
-      .catch(() => showWindowNotification(title, body, options));
-  } else {
-    showWindowNotification(title, body, options);
-  }
+  void title;
+  void body;
+  void options;
 }
 
 function showWindowNotification(title, body, options = {}) {
-  new Notification(title, {
-    body,
-    icon: "/logbook-browser-icon-v11.png",
-    tag: options.tag || title,
-    requireInteraction: Boolean(options.requireInteraction)
-  });
+  void title;
+  void body;
+  void options;
 }
 
 function activeOutings() {

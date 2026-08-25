@@ -242,7 +242,6 @@ function addAlert(state, alert) {
   };
   state.alerts.push(storedAlert);
   state.alerts = state.alerts.slice(-200);
-  sendWebPushAlert(state, storedAlert);
   sendHubPushAlert(storedAlert);
 }
 
@@ -271,40 +270,8 @@ function sendHubPushAlert(alert) {
 }
 
 function sendWebPushAlert(state, alert) {
-  if (!webPush || !vapidPublicKey || !vapidPrivateKey) return;
-  const recipients = new Set((alert.recipients || []).filter(Boolean));
-  if (!recipients.size) return;
-
-  const expiredEndpoints = new Set();
-  const latestByRecipient = new Map();
-  (state.subscriptions || [])
-    .filter((item) => recipients.has(item.userName) && item.subscription?.endpoint)
-    .forEach((item) => {
-      const existing = latestByRecipient.get(item.userName);
-      const existingTime = existing ? new Date(existing.updatedAt || existing.createdAt || 0).getTime() : 0;
-      const itemTime = new Date(item.updatedAt || item.createdAt || 0).getTime();
-      if (!existing || itemTime >= existingTime) latestByRecipient.set(item.userName, item);
-    });
-
-  const deliveries = [...latestByRecipient.values()]
-    .map((item) =>
-      webPush
-        .sendNotification(item.subscription, JSON.stringify(alert))
-        .catch((error) => {
-          if (error.statusCode === 404 || error.statusCode === 410) {
-            expiredEndpoints.add(item.subscription?.endpoint);
-          }
-          console.warn("Web push failed", item.userName, error.statusCode || error.message);
-        })
-    );
-
-  if (deliveries.length) {
-    Promise.allSettled(deliveries).then(() => {
-      if (!expiredEndpoints.size) return;
-      state.subscriptions = (state.subscriptions || []).filter((item) => !expiredEndpoints.has(item.subscription?.endpoint));
-      writeState(state);
-    });
-  }
+  void state;
+  void alert;
 }
 
 function overdueMinutes(now, dueAt) {
@@ -408,7 +375,7 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/push/public-key") {
-    sendJson(response, 200, { publicKey: vapidPublicKey, configured: Boolean(vapidPublicKey && vapidPrivateKey) });
+    sendJson(response, 200, { publicKey: "", configured: false, hubOnly: true });
     return;
   }
 
@@ -416,7 +383,8 @@ async function handleApi(request, response, url) {
     const subscriptions = state.subscriptions || [];
     const userName = url.searchParams.get("userName") || "";
     sendJson(response, 200, {
-      configured: Boolean(webPush && vapidPublicKey && vapidPrivateKey),
+      configured: false,
+      hubOnly: true,
       subscriptionCount: subscriptions.length,
       users: [...new Set(subscriptions.map((item) => item.userName).filter(Boolean))].sort(),
       userRegistered: userName ? subscriptions.some((item) => item.userName === userName && item.subscription?.endpoint) : null
@@ -425,24 +393,7 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/push/subscribe") {
-    const body = await readBody(request);
-    if (!body.userName || !body.subscription) {
-      sendJson(response, 400, { error: "Missing userName or subscription" });
-      return;
-    }
-    const endpoint = body.subscription?.endpoint;
-    state.subscriptions = (state.subscriptions || []).filter(
-      (item) => item.subscription?.endpoint !== endpoint && item.userName !== body.userName
-    );
-    state.subscriptions.push({
-      id: randomUUID(),
-      userName: body.userName,
-      subscription: body.subscription,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
-    writeState(state);
-    sendJson(response, 200, { ok: true, userName: body.userName, subscriptionCount: state.subscriptions.length });
+    sendJson(response, 409, { error: "Phone notifications are managed through AWRC Hub.", hubOnly: true });
     return;
   }
 
