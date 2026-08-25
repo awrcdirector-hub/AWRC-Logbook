@@ -310,7 +310,7 @@ els.boatSearch.addEventListener("click", openBoatPicker);
 els.coxSearch.addEventListener("click", openCoxswainPicker);
 els.coxCaptain.addEventListener("change", (event) => setCaptain(event.target));
 els.enableNotifications.addEventListener("click", enableNotifications);
-els.notifyPersonSearch.addEventListener("click", openNotificationPersonPicker);
+els.notifyPersonSearch?.addEventListener("click", openNotificationPersonPicker);
 els.adminRemoveAthleteSearch.addEventListener("click", openAdminRemoveAthletePicker);
 els.adminRemoveBoatSearch.addEventListener("click", () => openAdminBoatPicker("remove"));
 els.adminStatusBoatSearch.addEventListener("click", () => openAdminBoatPicker("status"));
@@ -720,6 +720,7 @@ function render() {
 }
 
 function renderNotificationPersonOptions() {
+  if (!els.notifyPerson || !els.notifyPersonSearch) return;
   const selectedName = localStorage.getItem(NOTIFICATION_USER_KEY) || "";
   const exists = state.members.some((member) => member.name === selectedName);
   els.notifyPerson.value = exists ? selectedName : "";
@@ -1023,6 +1024,7 @@ function openCoxswainPicker() {
 }
 
 function openNotificationPersonPicker() {
+  if (!els.notifyPerson || !els.notifyPersonSearch) return;
   openPicker({
     title: "This device belongs to",
     placeholder: "Type your name",
