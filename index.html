@@ -162,6 +162,26 @@
                 <button class="submit danger-submit" type="submit">Remove Athlete</button>
               </form>
 
+              <form id="addAlertAdminForm" class="admin-card">
+                <h3>Add notification admin</h3>
+                <label>
+                  Name
+                  <input id="adminAlertAdminName" type="text" autocomplete="off" placeholder="Member name">
+                </label>
+                <div class="admin-mini-list" id="alertAdminList"></div>
+                <button class="submit" type="submit">Add Admin</button>
+              </form>
+
+              <form id="removeAlertAdminForm" class="admin-card">
+                <h3>Remove notification admin</h3>
+                <label>
+                  Name
+                  <button id="adminRemoveAlertAdminSearch" class="picker-trigger" type="button">Choose admin</button>
+                  <input id="adminRemoveAlertAdmin" type="hidden">
+                </label>
+                <button class="submit danger-submit" type="submit">Remove Admin</button>
+              </form>
+
               <form id="addBoatForm" class="admin-card">
                 <h3>Add boat</h3>
                 <label>

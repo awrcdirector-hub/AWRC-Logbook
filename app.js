@@ -14,11 +14,7 @@ const LOGBOOK_WEBHOOK_URL = "";
 const BOAT_STATUS_WEBHOOK_URL = "";
 let pushPublicVapidKey = "";
 const ADMIN_PASSWORD = "2852";
-const ALERT_ROLES = {
-  coaches: ["Axel Dickinson", "Allan Luff"],
-  safetyOfficer: "Axel Dickinson",
-  alwaysNotify: ["Axel Dickinson", "Tiffany Davies"]
-};
+const DEFAULT_ALERT_ADMINS = ["Axel Dickinson", "Allan Luff", "Tiffany Davies"];
 const HULL_TYPE_COLOURS = {
   racing: "#FFF2CC",
   training: "#F4CCCC",
@@ -272,6 +268,12 @@ const els = {
   adminAthleteGrade: $("#adminAthleteGrade"),
   removeAthleteForm: $("#removeAthleteForm"),
   adminRemoveAthlete: $("#adminRemoveAthlete"),
+  addAlertAdminForm: $("#addAlertAdminForm"),
+  adminAlertAdminName: $("#adminAlertAdminName"),
+  alertAdminList: $("#alertAdminList"),
+  removeAlertAdminForm: $("#removeAlertAdminForm"),
+  adminRemoveAlertAdmin: $("#adminRemoveAlertAdmin"),
+  adminRemoveAlertAdminSearch: $("#adminRemoveAlertAdminSearch"),
   addBoatForm: $("#addBoatForm"),
   adminBoatName: $("#adminBoatName"),
   adminBoatSeats: $("#adminBoatSeats"),
@@ -315,6 +317,9 @@ els.exportLogbook.addEventListener("click", exportLogbookCsv);
 els.adminUnlock.addEventListener("click", unlockAdmin);
 els.addAthleteForm.addEventListener("submit", addAdminAthlete);
 els.removeAthleteForm.addEventListener("submit", removeAdminAthlete);
+els.addAlertAdminForm.addEventListener("submit", addAlertAdmin);
+els.removeAlertAdminForm.addEventListener("submit", removeAlertAdmin);
+els.adminRemoveAlertAdminSearch.addEventListener("click", openAdminRemoveAlertAdminPicker);
 els.addBoatForm.addEventListener("submit", addAdminBoat);
 els.removeBoatForm.addEventListener("submit", removeAdminBoat);
 els.boatStatusForm.addEventListener("submit", updateAdminBoatStatus);
@@ -462,6 +467,10 @@ async function syncSharedConfig() {
       state.members = state.members.filter((member) => !state.removedMembers.includes(member.name));
       changed = true;
     }
+    if (Array.isArray(payload.alertAdmins)) {
+      state.alertAdmins = normaliseNameList(payload.alertAdmins);
+      changed = true;
+    }
     if (changed) {
       save();
       render();
@@ -480,7 +489,8 @@ async function saveSharedConfig() {
         members: state.members,
         plant: state.plant,
         boatOverrides: state.boatOverrides || {},
-        removedMembers: state.removedMembers || []
+        removedMembers: state.removedMembers || [],
+        alertAdmins: notificationAdmins()
       })
     });
   } catch (error) {
@@ -669,6 +679,7 @@ function freshDemoData() {
   data.plant = data.plant.map(applyBoatColour);
   data.boatOverrides = {};
   data.removedMembers = [];
+  data.alertAdmins = DEFAULT_ALERT_ADMINS;
   return data;
 }
 
@@ -676,6 +687,7 @@ function normalizeState(savedState) {
   const merged = { ...freshDemoData(), ...savedState };
   merged.removedMembers = Array.isArray(merged.removedMembers) ? merged.removedMembers : [];
   merged.members = mergeMembers(demoData.members, Array.isArray(merged.members) ? merged.members : [], merged.removedMembers);
+  merged.alertAdmins = normaliseNameList(merged.alertAdmins?.length ? merged.alertAdmins : DEFAULT_ALERT_ADMINS);
   merged.boatOverrides = merged.boatOverrides && typeof merged.boatOverrides === "object" ? merged.boatOverrides : {};
   merged.plant = merged.plant
     .filter((item) => item.type === "Boat")
@@ -696,6 +708,19 @@ function mergeMembers(defaultMembers, savedMembers, removedMembers = []) {
     membersByName.set(member.name, member);
   });
   return [...membersByName.values()];
+}
+
+function normaliseNameList(names = []) {
+  const byName = new Map();
+  names
+    .map((name) => String(name || "").trim())
+    .filter(Boolean)
+    .forEach((name) => byName.set(name.toLowerCase(), name));
+  return [...byName.values()].sort((a, b) => a.localeCompare(b));
+}
+
+function notificationAdmins() {
+  return normaliseNameList(state.alertAdmins?.length ? state.alertAdmins : DEFAULT_ALERT_ADMINS);
 }
 
 function showView(name) {
@@ -1056,6 +1081,22 @@ function openAdminRemoveAthletePicker() {
   });
 }
 
+function openAdminRemoveAlertAdminPicker() {
+  openPicker({
+    title: "Remove notification admin",
+    placeholder: "Type a name",
+    items: notificationAdmins().map((name) => ({
+      label: name,
+      value: name
+    })),
+    onSelect: (name) => {
+      els.adminRemoveAlertAdmin.value = name;
+      els.adminRemoveAlertAdminSearch.textContent = name;
+      return true;
+    }
+  });
+}
+
 function openAdminBoatPicker(target) {
   const boats = sortedBoats().map((boat) => ({
     label: boat.name,
@@ -1383,6 +1424,14 @@ function renderAdmin() {
   const statusBoat = state.plant.find((boat) => boat.id === els.adminStatusBoat.value);
   els.adminStatusBoatSearch.textContent = statusBoat ? statusBoat.name : "Choose boat";
   if (!statusBoat) els.adminStatusBoat.value = "";
+
+  const removeAlertAdmin = notificationAdmins().find((name) => name === els.adminRemoveAlertAdmin.value);
+  els.adminRemoveAlertAdminSearch.textContent = removeAlertAdmin || "Choose admin";
+  if (!removeAlertAdmin) els.adminRemoveAlertAdmin.value = "";
+
+  els.alertAdminList.innerHTML = notificationAdmins()
+    .map((name) => `<span class="admin-mini-pill">${escapeHtml(name)}</span>`)
+    .join("");
 }
 
 function unlockAdmin() {
@@ -1440,10 +1489,51 @@ function removeAdminAthlete(event) {
   }
   state.members = state.members.filter((member) => member.name !== name);
   state.removedMembers = [...new Set([...(state.removedMembers || []), name])];
+  state.alertAdmins = notificationAdmins().filter((adminName) => adminName !== name);
   save();
   saveSharedConfig();
   render();
   showAdminMessage(`${name} removed. Athlete list now has ${state.members.length} names.`, "success");
+}
+
+function addAlertAdmin(event) {
+  event.preventDefault();
+  if (!requireAdminUnlocked()) return;
+  const name = els.adminAlertAdminName.value.trim();
+  if (!name) {
+    showAdminMessage("Enter a notification admin name.", "error");
+    return;
+  }
+  const member = state.members.find((item) => item.name.toLowerCase() === name.toLowerCase());
+  if (!member) {
+    showAdminMessage(`${name} is not in the member list. Add them as an athlete/member first.`, "error");
+    return;
+  }
+  if (notificationAdmins().some((adminName) => adminName.toLowerCase() === member.name.toLowerCase())) {
+    showAdminMessage(`${member.name} already receives Logbook admin notifications.`, "error");
+    return;
+  }
+  state.alertAdmins = normaliseNameList([...notificationAdmins(), member.name]);
+  save();
+  saveSharedConfig();
+  els.addAlertAdminForm.reset();
+  render();
+  showAdminMessage(`${member.name} will receive Logbook admin notifications.`, "success");
+}
+
+function removeAlertAdmin(event) {
+  event.preventDefault();
+  if (!requireAdminUnlocked()) return;
+  const name = els.adminRemoveAlertAdmin.value;
+  if (!name) {
+    showAdminMessage("Choose a notification admin to remove.", "error");
+    return;
+  }
+  state.alertAdmins = notificationAdmins().filter((adminName) => adminName !== name);
+  save();
+  saveSharedConfig();
+  render();
+  showAdminMessage(`${name} removed from Logbook admin notifications.`, "success");
 }
 
 function addAdminBoat(event) {
@@ -1718,9 +1808,7 @@ function sendMaintenanceAlert(outing, note) {
 function alertRecipients(outing) {
   const names = [
     outing.captain?.name,
-    ...ALERT_ROLES.coaches,
-    ALERT_ROLES.safetyOfficer,
-    ...ALERT_ROLES.alwaysNotify
+    ...notificationAdmins()
   ].filter(Boolean);
   return [...new Set(names)];
 }
@@ -1732,8 +1820,7 @@ function alertPayload(outing) {
     rowers: (outing.members || []).map((member) => member.name),
     coxswain: outing.coxswain?.name || "",
     captain: outing.captain?.name || "",
-    coaches: ALERT_ROLES.coaches,
-    safetyOfficer: ALERT_ROLES.safetyOfficer,
+    notificationAdmins: notificationAdmins(),
     outAt: outing.outAt,
     dueAt: outing.dueAt,
     alertAt: alertAt(outing.dueAt).toISOString(),

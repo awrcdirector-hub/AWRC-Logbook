@@ -601,6 +601,23 @@ textarea {
   background: #f8fcfd;
 }
 
+.admin-mini-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-mini-pill {
+  background: #eef5f7;
+  border-radius: 999px;
+  color: var(--water-dark);
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 900;
+  min-height: 28px;
+  padding: 5px 9px;
+}
+
 .admin-status {
   display: inline-flex;
   align-items: center;

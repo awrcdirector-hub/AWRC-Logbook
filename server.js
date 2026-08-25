@@ -16,7 +16,7 @@ const stateStoreUrl = process.env.STATE_STORE_URL || "";
 const stateStoreToken = process.env.STATE_STORE_TOKEN || "";
 const overdueGraceMs = 30 * 60 * 1000;
 const overdueRepeatMs = 10 * 60 * 1000;
-const alwaysNotify = ["Axel Dickinson", "Tiffany Davies"];
+const defaultAlertAdmins = ["Axel Dickinson", "Allan Luff", "Tiffany Davies"];
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || "";
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "";
 const vapidSubject = process.env.VAPID_SUBJECT || "mailto:admin@awrc.local";
@@ -39,7 +39,7 @@ const types = {
 };
 
 function defaultState() {
-  return { outings: [], alerts: [], subscriptions: [], config: { members: [], plant: [], boatOverrides: {}, removedMembers: [] } };
+  return { outings: [], alerts: [], subscriptions: [], config: { members: [], plant: [], boatOverrides: {}, removedMembers: [], alertAdmins: defaultAlertAdmins } };
 }
 
 let serverState = defaultState();
@@ -68,7 +68,8 @@ function normalizeState(state = {}) {
       members: Array.isArray(state.config?.members) ? state.config.members : [],
       plant: Array.isArray(state.config?.plant) ? state.config.plant : [],
       boatOverrides: state.config?.boatOverrides && typeof state.config.boatOverrides === "object" ? state.config.boatOverrides : {},
-      removedMembers: Array.isArray(state.config?.removedMembers) ? state.config.removedMembers : []
+      removedMembers: Array.isArray(state.config?.removedMembers) ? state.config.removedMembers : [],
+      alertAdmins: normaliseNameList(state.config?.alertAdmins?.length ? state.config.alertAdmins : defaultAlertAdmins)
     }
   };
 }
@@ -300,8 +301,22 @@ function mergeConfig(currentConfig = {}, incomingConfig = {}) {
     members: [...membersByName.values()],
     plant: [...plantById.values()],
     boatOverrides,
-    removedMembers
+    removedMembers,
+    alertAdmins: normaliseNameList(incomingConfig.alertAdmins?.length ? incomingConfig.alertAdmins : currentConfig.alertAdmins?.length ? currentConfig.alertAdmins : defaultAlertAdmins)
   };
+}
+
+function normaliseNameList(names = []) {
+  const byName = new Map();
+  names
+    .map((name) => String(name || "").trim())
+    .filter(Boolean)
+    .forEach((name) => byName.set(name.toLowerCase(), name));
+  return [...byName.values()].sort((a, b) => a.localeCompare(b));
+}
+
+function notificationAdmins(config = readState().config) {
+  return normaliseNameList(config?.alertAdmins?.length ? config.alertAdmins : defaultAlertAdmins);
 }
 
 function checkOverdueCrews() {
@@ -338,7 +353,7 @@ function checkOverdueCrews() {
 }
 
 function alertRecipients(outing) {
-  return [...new Set([outing.captain?.name, "Allan Luff", ...alwaysNotify].filter(Boolean))];
+  return [...new Set([outing.captain?.name, ...notificationAdmins()].filter(Boolean))];
 }
 
 function captainRecipients(outing) {
