@@ -20,6 +20,9 @@ const alwaysNotify = ["Axel Dickinson", "Tiffany Davies"];
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || "";
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "";
 const vapidSubject = process.env.VAPID_SUBJECT || "mailto:admin@awrc.local";
+const hubNotifyUrl = process.env.HUB_NOTIFY_URL || "https://awrc-hub.onrender.com/api/notifications/send";
+const hubNotifySecret = process.env.HUB_NOTIFY_SECRET || "";
+const logbookPublicUrl = process.env.LOGBOOK_PUBLIC_URL || "https://awrc-logbook.onrender.com/";
 
 if (webPush && vapidPublicKey && vapidPrivateKey) {
   webPush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
@@ -240,6 +243,31 @@ function addAlert(state, alert) {
   state.alerts.push(storedAlert);
   state.alerts = state.alerts.slice(-200);
   sendWebPushAlert(state, storedAlert);
+  sendHubPushAlert(storedAlert);
+}
+
+function sendHubPushAlert(alert) {
+  const recipients = (alert.recipients || []).filter(Boolean);
+  if (!hubNotifyUrl || !recipients.length || typeof fetch !== "function") return;
+
+  const headers = { "Content-Type": "application/json" };
+  if (hubNotifySecret) headers["X-Hub-Notify-Secret"] = hubNotifySecret;
+
+  fetch(hubNotifyUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      app: "logbook",
+      recipients,
+      title: alert.title || "Outing Logbook alert",
+      body: alert.message || "Open Outing Logbook for details.",
+      url: logbookPublicUrl,
+      tag: alert.key || alert.id || alert.type || "awrc-logbook",
+      requireInteraction: Boolean(alert.requireInteraction)
+    })
+  }).catch((error) => {
+    console.warn("Hub notification forward failed", error.message);
+  });
 }
 
 function sendWebPushAlert(state, alert) {
