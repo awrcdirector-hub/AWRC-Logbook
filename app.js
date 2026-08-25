@@ -284,8 +284,6 @@ const els = {
   adminStatusValue: $("#adminStatusValue"),
   adminStatusNote: $("#adminStatusNote"),
   adminMessage: $("#adminMessage"),
-  enableNotifications: $("#enableNotifications"),
-  notificationNotice: $("#notificationNotice"),
   notifyPersonSearch: $("#notifyPersonSearch"),
   notifyPerson: $("#notifyPerson"),
   adminRemoveAthleteSearch: $("#adminRemoveAthleteSearch"),
@@ -309,7 +307,6 @@ els.signOutForm.addEventListener("submit", signOut);
 els.boatSearch.addEventListener("click", openBoatPicker);
 els.coxSearch.addEventListener("click", openCoxswainPicker);
 els.coxCaptain.addEventListener("change", (event) => setCaptain(event.target));
-els.enableNotifications.addEventListener("click", enableNotifications);
 els.notifyPersonSearch?.addEventListener("click", openNotificationPersonPicker);
 els.adminRemoveAthleteSearch.addEventListener("click", openAdminRemoveAthletePicker);
 els.adminRemoveBoatSearch.addEventListener("click", () => openAdminBoatPicker("remove"));
@@ -344,10 +341,8 @@ document.addEventListener("visibilitychange", () => {
     syncSharedConfig();
     syncSharedOutings();
     pollSharedAlerts();
-    renderNotificationNotice();
   }
 });
-window.addEventListener("focus", renderNotificationNotice);
 
 function load() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -716,7 +711,6 @@ function render() {
   renderPlant();
   renderLogbook();
   renderAdmin();
-  renderNotificationNotice();
 }
 
 function renderNotificationPersonOptions() {
@@ -1041,7 +1035,6 @@ function openNotificationPersonPicker() {
         localStorage.removeItem(PUSH_REGISTERED_KEY);
         localStorage.removeItem(PUSH_REGISTERED_USER_KEY);
       }
-      renderNotificationNotice();
       return true;
     }
   });
@@ -1804,16 +1797,6 @@ function notificationUserName() {
 function isPushRegisteredForCurrentUser() {
   return localStorage.getItem(PUSH_REGISTERED_KEY) === "true"
     && localStorage.getItem(PUSH_REGISTERED_USER_KEY) === notificationUserName();
-}
-
-async function enableNotifications() {
-  window.open("https://awrc-hub.onrender.com/#", "_blank", "noopener");
-}
-
-function renderNotificationNotice() {
-  els.notificationNotice.querySelector("p").textContent = "Phone notifications are managed through AWRC Hub so each member only registers one device pathway.";
-  els.enableNotifications.textContent = "Open Hub";
-  els.enableNotifications.disabled = false;
 }
 
 async function registerDeviceForPush() {
