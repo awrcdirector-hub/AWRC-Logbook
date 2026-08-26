@@ -9,6 +9,7 @@ const FLEET_SYNC_INTERVAL_MS = 60 * 1000;
 const SHARED_SYNC_INTERVAL_MS = 5000;
 const ALERT_POLL_INTERVAL_MS = 5000;
 const BOAT_ALLOCATION_CSV_URL = "https://docs.google.com/spreadsheets/d/1u5FggSDDpYk5m24o4D8UdPPujGj8G54US7rQ0PNE-B0/export?format=csv";
+const HUB_MEMBERS_URL = "https://awrc-hub.onrender.com/api/members";
 const API_BASE_URL = "";
 const LOGBOOK_WEBHOOK_URL = "";
 const BOAT_STATUS_WEBHOOK_URL = "";
@@ -334,16 +335,19 @@ setInterval(checkLateCrews, 15000);
 render();
 syncFleetFromSheet();
 syncSharedConfig();
+syncHubMembers();
 syncSharedOutings();
 pollSharedAlerts();
 setInterval(syncFleetFromSheet, FLEET_SYNC_INTERVAL_MS);
 setInterval(syncSharedConfig, FLEET_SYNC_INTERVAL_MS);
+setInterval(syncHubMembers, FLEET_SYNC_INTERVAL_MS);
 setInterval(syncSharedOutings, SHARED_SYNC_INTERVAL_MS);
 setInterval(pollSharedAlerts, ALERT_POLL_INTERVAL_MS);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     syncFleetFromSheet();
     syncSharedConfig();
+    syncHubMembers();
     syncSharedOutings();
     pollSharedAlerts();
   }
@@ -477,6 +481,66 @@ async function syncSharedConfig() {
     }
   } catch (error) {
     console.warn("Shared admin config sync failed", error);
+  }
+}
+
+function normaliseHubMember(member) {
+  const source = typeof member === "string" ? { name: member } : member || {};
+  const name = String(source.name || "").trim().replace(/\s+/g, " ");
+  if (!name) return null;
+  return {
+    name,
+    grade: source.grade || source.ageGroup || "Club"
+  };
+}
+
+async function syncHubMembers() {
+  try {
+    const response = await fetch(HUB_MEMBERS_URL, { cache: "no-store" });
+    if (!response.ok) return;
+    const payload = await response.json();
+    const hubMembers = (Array.isArray(payload.members) ? payload.members : payload.names || [])
+      .map(normaliseHubMember)
+      .filter(Boolean);
+    if (!hubMembers.length) return;
+
+    const localByName = new Map(state.members.map((member) => [member.name.toLowerCase(), member]));
+    state.members = hubMembers
+      .map((member) => ({ ...localByName.get(member.name.toLowerCase()), ...member }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    state.removedMembers = [];
+    save();
+    render();
+  } catch (error) {
+    console.warn("Hub member sync failed", error);
+  }
+}
+
+async function saveHubMember(member) {
+  try {
+    await fetch(HUB_MEMBERS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Admin-Password": ADMIN_PASSWORD },
+      body: JSON.stringify({
+        name: member.name,
+        grade: member.grade || "",
+        role: member.grade === "Coxswain" ? "Coxswain" : "Athlete"
+      })
+    });
+  } catch (error) {
+    console.warn("Hub member save failed", error);
+  }
+}
+
+async function deleteHubMember(name) {
+  try {
+    await fetch(HUB_MEMBERS_URL, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", "X-Admin-Password": ADMIN_PASSWORD },
+      body: JSON.stringify({ name })
+    });
+  } catch (error) {
+    console.warn("Hub member removal failed", error);
   }
 }
 
@@ -1470,10 +1534,12 @@ function addAdminAthlete(event) {
     showAdminMessage(`${name} is already in the athlete list.`, "error");
     return;
   }
-  state.members.push({ name, grade: els.adminAthleteGrade.value });
+  const member = { name, grade: els.adminAthleteGrade.value, ageGroup: "" };
+  state.members.push(member);
   state.members = sortedMembers();
   save();
   saveSharedConfig();
+  saveHubMember(member);
   els.addAthleteForm.reset();
   render();
   showAdminMessage(`${name} added. Athlete list now has ${state.members.length} names.`, "success");
@@ -1492,6 +1558,7 @@ function removeAdminAthlete(event) {
   state.alertAdmins = notificationAdmins().filter((adminName) => adminName !== name);
   save();
   saveSharedConfig();
+  deleteHubMember(name);
   render();
   showAdminMessage(`${name} removed. Athlete list now has ${state.members.length} names.`, "success");
 }
