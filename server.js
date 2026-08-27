@@ -26,6 +26,7 @@ const hubBaseUrl = (process.env.HUB_BASE_URL || "https://awrc-hub.onrender.com")
 const logbookPublicUrl = process.env.LOGBOOK_PUBLIC_URL || "https://awrc-logbook.onrender.com/";
 const adminRecoveryEmail = "awrcdirector@gmail.com";
 const adminCredentialFile = process.env.ADMIN_CREDENTIAL_FILE || path.join(dataDir, "logbook-admin-credentials.json");
+const adminResetFile = process.env.ADMIN_RESET_FILE || path.join(dataDir, "logbook-admin-reset.json");
 const adminCredentialKey = "logbook-admin";
 
 if (webPush && vapidPublicKey && vapidPrivateKey) {
@@ -101,14 +102,54 @@ function requireAdmin(request, response) {
   return false;
 }
 
-function resetAdminPassword(resetToken, nextPassword) {
-  if (!safeEqual(resetToken, requiredEnv("ADMIN_RESET_TOKEN"))) return false;
+function resetTokenHash(token) {
+  return createHmac("sha256", requiredEnv("ADMIN_SESSION_SECRET")).update(token).digest("hex");
+}
+
+function createPasswordResetLink() {
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = Date.now() + 1000 * 60 * 30;
+  fs.mkdirSync(path.dirname(adminResetFile), { recursive: true });
+  fs.writeFileSync(adminResetFile, JSON.stringify({ tokenHash: resetTokenHash(token), expiresAt }, null, 2));
+  return `${logbookPublicUrl.replace(/\/$/, "")}/reset-password.html?token=${encodeURIComponent(token)}`;
+}
+
+async function sendPasswordResetEmail(link) {
+  const apiKey = (process.env.RESEND_API_KEY || "").trim();
+  const from = (process.env.PASSWORD_RESET_FROM_EMAIL || "").trim();
+  if (!apiKey || !from) throw new Error("Password reset email is not configured. Add RESEND_API_KEY and PASSWORD_RESET_FROM_EMAIL in Render.");
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from,
+      to: adminRecoveryEmail,
+      subject: "AWRC Logbook password reset",
+      html: `<p>Use this secure link to reset the AWRC Logbook admin password:</p><p><a href="${link}">Reset password</a></p><p>This link expires in 30 minutes.</p>`,
+      text: `Use this secure link to reset the AWRC Logbook admin password: ${link}\n\nThis link expires in 30 minutes.`
+    })
+  });
+  if (!response.ok) throw new Error(`Email service returned ${response.status}.`);
+}
+
+function resetAdminPassword(token, nextPassword) {
+  let reset;
+  try {
+    reset = JSON.parse(fs.readFileSync(adminResetFile, "utf8"));
+  } catch {
+    return false;
+  }
+  if (!reset?.tokenHash || !reset?.expiresAt || Date.now() > Number(reset.expiresAt)) return false;
+  if (!safeEqual(resetTokenHash(token), reset.tokenHash)) return false;
   if (!String(nextPassword || "").trim() || String(nextPassword).trim().length < 4) {
     throw new Error("Password must be at least 4 characters.");
   }
   const { hash, salt } = hashPassword(String(nextPassword).trim());
   fs.mkdirSync(path.dirname(adminCredentialFile), { recursive: true });
   fs.writeFileSync(adminCredentialFile, JSON.stringify({ key: adminCredentialKey, passwordHash: hash, passwordSalt: salt }, null, 2));
+  try {
+    fs.rmSync(adminResetFile, { force: true });
+  } catch {}
   return true;
 }
 
@@ -470,15 +511,26 @@ async function handleApi(request, response, url) {
     return;
   }
 
-  if (request.method === "POST" && url.pathname === "/api/admin/reset-password") {
+  if (request.method === "POST" && url.pathname === "/api/admin/forgot-password") {
     const body = await readBody(request);
     if (String(body.email || "").trim().toLowerCase() !== adminRecoveryEmail) {
       sendJson(response, 403, { error: `Password recovery is only available for ${adminRecoveryEmail}.` });
       return;
     }
     try {
-      if (!resetAdminPassword(body.resetToken || "", body.nextPassword || "")) {
-        sendJson(response, 401, { error: "Reset token is incorrect." });
+      await sendPasswordResetEmail(createPasswordResetLink());
+      sendJson(response, 200, { ok: true, message: `Password reset email sent to ${adminRecoveryEmail}.` });
+    } catch (error) {
+      sendJson(response, 500, { error: error.message || "Password reset email could not be sent." });
+    }
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/admin/reset-password") {
+    const body = await readBody(request);
+    try {
+      if (!resetAdminPassword(body.token || "", body.nextPassword || "")) {
+        sendJson(response, 401, { error: "Reset link is invalid or expired." });
         return;
       }
       sendJson(response, 200, { ok: true });

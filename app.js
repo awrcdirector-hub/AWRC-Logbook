@@ -264,9 +264,7 @@ const els = {
   adminPassword: $("#adminPassword"),
   adminUnlock: $("#adminUnlock"),
   adminResetEmail: $("#adminResetEmail"),
-  adminResetToken: $("#adminResetToken"),
-  adminResetPassword: $("#adminResetPassword"),
-  adminResetPasswordButton: $("#adminResetPasswordButton"),
+  adminForgotPasswordButton: $("#adminForgotPasswordButton"),
   addAthleteForm: $("#addAthleteForm"),
   adminAthleteName: $("#adminAthleteName"),
   adminAthleteGrade: $("#adminAthleteGrade"),
@@ -320,7 +318,7 @@ els.adminRemoveBoatSearch.addEventListener("click", () => openAdminBoatPicker("r
 els.adminStatusBoatSearch.addEventListener("click", () => openAdminBoatPicker("status"));
 els.exportLogbook.addEventListener("click", exportLogbookCsv);
 els.adminUnlock.addEventListener("click", unlockAdmin);
-els.adminResetPasswordButton?.addEventListener("click", resetAdminPassword);
+els.adminForgotPasswordButton?.addEventListener("click", sendPasswordResetEmail);
 els.addAthleteForm.addEventListener("submit", addAdminAthlete);
 els.removeAthleteForm.addEventListener("submit", removeAdminAthlete);
 els.addAlertAdminForm.addEventListener("submit", addAlertAdmin);
@@ -1533,26 +1531,23 @@ async function unlockAdmin() {
   showAdminMessage("Admin unlocked for this device.", "success");
 }
 
-async function resetAdminPassword() {
-  const response = await fetch(`${API_BASE_URL}/api/admin/reset-password`, {
+async function sendPasswordResetEmail() {
+  const response = await fetch(`${API_BASE_URL}/api/admin/forgot-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email: els.adminResetEmail?.value || "",
-      resetToken: els.adminResetToken?.value || "",
-      nextPassword: els.adminResetPassword?.value || ""
     })
   });
 
   if (response.ok) {
-    if (els.adminResetToken) els.adminResetToken.value = "";
-    if (els.adminResetPassword) els.adminResetPassword.value = "";
-    showAdminMessage("Password reset. Sign in with the new password.", "success");
+    const payload = await response.json().catch(() => ({}));
+    showAdminMessage(payload.message || "Password reset email sent.", "success");
     return;
   }
 
   const payload = await response.json().catch(() => ({}));
-  showAdminMessage(payload.error || "Password could not be reset.", "error");
+  showAdminMessage(payload.error || "Reset email could not be sent.", "error");
 }
 
 function requireAdminUnlocked() {
