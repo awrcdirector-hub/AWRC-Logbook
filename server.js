@@ -1,7 +1,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const { randomUUID } = require("crypto");
+const { createHmac, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } = require("crypto");
 let webPush = null;
 try {
   webPush = require("web-push");
@@ -22,7 +22,11 @@ const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "";
 const vapidSubject = process.env.VAPID_SUBJECT || "mailto:admin@awrc.local";
 const hubNotifyUrl = process.env.HUB_NOTIFY_URL || "https://awrc-hub.onrender.com/api/notifications/send";
 const hubNotifySecret = process.env.HUB_NOTIFY_SECRET || "";
+const hubBaseUrl = (process.env.HUB_BASE_URL || "https://awrc-hub.onrender.com").replace(/\/$/, "");
 const logbookPublicUrl = process.env.LOGBOOK_PUBLIC_URL || "https://awrc-logbook.onrender.com/";
+const adminRecoveryEmail = "awrcdirector@gmail.com";
+const adminCredentialFile = process.env.ADMIN_CREDENTIAL_FILE || path.join(dataDir, "logbook-admin-credentials.json");
+const adminCredentialKey = "logbook-admin";
 
 if (webPush && vapidPublicKey && vapidPrivateKey) {
   webPush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
@@ -37,6 +41,90 @@ const types = {
   ".png": "image/png",
   ".ico": "image/x-icon"
 };
+
+function requiredEnv(name) {
+  const value = (process.env[name] || "").trim();
+  if (!value) throw new Error(`${name} is not configured.`);
+  return value;
+}
+
+function hashPassword(password, salt = randomBytes(16).toString("hex")) {
+  return {
+    hash: pbkdf2Sync(password, salt, 210000, 32, "sha256").toString("hex"),
+    salt
+  };
+}
+
+function safeEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left || ""));
+  const rightBuffer = Buffer.from(String(right || ""));
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function readAdminCredentials() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(adminCredentialFile, "utf8"));
+    if (parsed.passwordHash && parsed.passwordSalt) return parsed;
+  } catch {}
+  return {
+    passwordHash: requiredEnv("ADMIN_PASSWORD_HASH"),
+    passwordSalt: requiredEnv("ADMIN_PASSWORD_SALT")
+  };
+}
+
+function verifyAdminPassword(password) {
+  const credential = readAdminCredentials();
+  const { hash } = hashPassword(password, credential.passwordSalt);
+  return safeEqual(hash, credential.passwordHash);
+}
+
+function issueAdminToken() {
+  const expires = Date.now() + 1000 * 60 * 60 * 12;
+  const payload = `${expires}`;
+  const signature = createHmac("sha256", requiredEnv("ADMIN_SESSION_SECRET")).update(payload).digest("hex");
+  return `${payload}.${signature}`;
+}
+
+function adminAuthorised(request) {
+  const header = request.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+  const [expires, signature] = token.split(".");
+  const expiresAt = Number(expires);
+  if (!expires || !signature || !Number.isFinite(expiresAt) || expiresAt < Date.now()) return false;
+  const expected = createHmac("sha256", requiredEnv("ADMIN_SESSION_SECRET")).update(expires).digest("hex");
+  return safeEqual(signature, expected);
+}
+
+function requireAdmin(request, response) {
+  if (adminAuthorised(request)) return true;
+  sendJson(response, 401, { error: "Admin login required" });
+  return false;
+}
+
+function resetAdminPassword(resetToken, nextPassword) {
+  if (!safeEqual(resetToken, requiredEnv("ADMIN_RESET_TOKEN"))) return false;
+  if (!String(nextPassword || "").trim() || String(nextPassword).trim().length < 4) {
+    throw new Error("Password must be at least 4 characters.");
+  }
+  const { hash, salt } = hashPassword(String(nextPassword).trim());
+  fs.mkdirSync(path.dirname(adminCredentialFile), { recursive: true });
+  fs.writeFileSync(adminCredentialFile, JSON.stringify({ key: adminCredentialKey, passwordHash: hash, passwordSalt: salt }, null, 2));
+  return true;
+}
+
+async function hubAdminToken() {
+  const password = (process.env.HUB_ADMIN_PASSWORD || "").trim();
+  if (!password) throw new Error("HUB_ADMIN_PASSWORD is not configured.");
+  const response = await fetch(`${hubBaseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password })
+  });
+  if (!response.ok) throw new Error("Hub admin login failed.");
+  const payload = await response.json();
+  if (!payload.token) throw new Error("Hub admin token was not returned.");
+  return payload.token;
+}
 
 function defaultState() {
   return { outings: [], alerts: [], subscriptions: [], config: { members: [], plant: [], boatOverrides: {}, removedMembers: [], alertAdmins: defaultAlertAdmins } };
@@ -372,6 +460,34 @@ function time(value) {
 async function handleApi(request, response, url) {
   const state = readState();
 
+  if (request.method === "POST" && url.pathname === "/api/admin/login") {
+    const body = await readBody(request);
+    if (!verifyAdminPassword(body.password || "")) {
+      sendJson(response, 401, { error: "Incorrect admin password." });
+      return;
+    }
+    sendJson(response, 200, { token: issueAdminToken() });
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/admin/reset-password") {
+    const body = await readBody(request);
+    if (String(body.email || "").trim().toLowerCase() !== adminRecoveryEmail) {
+      sendJson(response, 403, { error: `Password recovery is only available for ${adminRecoveryEmail}.` });
+      return;
+    }
+    try {
+      if (!resetAdminPassword(body.resetToken || "", body.nextPassword || "")) {
+        sendJson(response, 401, { error: "Reset token is incorrect." });
+        return;
+      }
+      sendJson(response, 200, { ok: true });
+    } catch (error) {
+      sendJson(response, 400, { error: error.message || "Password could not be reset." });
+    }
+    return;
+  }
+
   if (request.method === "GET" && url.pathname === "/api/config") {
     sendJson(response, 200, state.config || defaultState().config);
     return;
@@ -383,9 +499,25 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/config") {
+    if (!requireAdmin(request, response)) return;
     state.config = mergeConfig(state.config || defaultState().config, await readBody(request));
     writeState(state);
     sendJson(response, 200, { ok: true, config: state.config });
+    return;
+  }
+
+  if ((request.method === "POST" || request.method === "DELETE") && url.pathname === "/api/hub-members") {
+    if (!requireAdmin(request, response)) return;
+    try {
+      const hubResponse = await fetch(`${hubBaseUrl}/api/members`, {
+        method: request.method,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await hubAdminToken()}` },
+        body: JSON.stringify(await readBody(request))
+      });
+      sendJson(response, hubResponse.status, await hubResponse.json());
+    } catch (error) {
+      sendJson(response, 500, { error: error.message || "Hub member sync failed." });
+    }
     return;
   }
 

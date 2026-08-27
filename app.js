@@ -14,7 +14,6 @@ const API_BASE_URL = "";
 const LOGBOOK_WEBHOOK_URL = "";
 const BOAT_STATUS_WEBHOOK_URL = "";
 let pushPublicVapidKey = "";
-const ADMIN_PASSWORD = "2852";
 const DEFAULT_ALERT_ADMINS = ["Axel Dickinson", "Allan Luff", "Tiffany Davies"];
 const HULL_TYPE_COLOURS = {
   racing: "#FFF2CC",
@@ -264,6 +263,10 @@ const els = {
   adminStatus: $("#adminStatus"),
   adminPassword: $("#adminPassword"),
   adminUnlock: $("#adminUnlock"),
+  adminResetEmail: $("#adminResetEmail"),
+  adminResetToken: $("#adminResetToken"),
+  adminResetPassword: $("#adminResetPassword"),
+  adminResetPasswordButton: $("#adminResetPasswordButton"),
   addAthleteForm: $("#addAthleteForm"),
   adminAthleteName: $("#adminAthleteName"),
   adminAthleteGrade: $("#adminAthleteGrade"),
@@ -301,6 +304,7 @@ const els = {
 };
 let activePicker = null;
 let adminUnlocked = false;
+let adminToken = "";
 
 actionButtons.forEach((button) => {
   button.addEventListener("click", () => showView(button.dataset.view));
@@ -316,6 +320,7 @@ els.adminRemoveBoatSearch.addEventListener("click", () => openAdminBoatPicker("r
 els.adminStatusBoatSearch.addEventListener("click", () => openAdminBoatPicker("status"));
 els.exportLogbook.addEventListener("click", exportLogbookCsv);
 els.adminUnlock.addEventListener("click", unlockAdmin);
+els.adminResetPasswordButton?.addEventListener("click", resetAdminPassword);
 els.addAthleteForm.addEventListener("submit", addAdminAthlete);
 els.removeAthleteForm.addEventListener("submit", removeAdminAthlete);
 els.addAlertAdminForm.addEventListener("submit", addAlertAdmin);
@@ -518,9 +523,9 @@ async function syncHubMembers() {
 
 async function saveHubMember(member) {
   try {
-    await fetch(HUB_MEMBERS_URL, {
+    await fetch(`${API_BASE_URL}/api/hub-members`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Admin-Password": ADMIN_PASSWORD },
+      headers: adminHeaders(),
       body: JSON.stringify({
         name: member.name,
         grade: member.grade || "",
@@ -534,9 +539,9 @@ async function saveHubMember(member) {
 
 async function deleteHubMember(name) {
   try {
-    await fetch(HUB_MEMBERS_URL, {
+    await fetch(`${API_BASE_URL}/api/hub-members`, {
       method: "DELETE",
-      headers: { "Content-Type": "application/json", "X-Admin-Password": ADMIN_PASSWORD },
+      headers: adminHeaders(),
       body: JSON.stringify({ name })
     });
   } catch (error) {
@@ -548,7 +553,7 @@ async function saveSharedConfig() {
   try {
     await fetch(`${API_BASE_URL}/api/config`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: adminHeaders(),
       body: JSON.stringify({
         members: state.members,
         plant: state.plant,
@@ -1498,11 +1503,27 @@ function renderAdmin() {
     .join("");
 }
 
-function unlockAdmin() {
-  if (els.adminPassword.value !== ADMIN_PASSWORD) {
+function adminHeaders() {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${adminToken}`
+  };
+}
+
+async function unlockAdmin() {
+  const response = await fetch(`${API_BASE_URL}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: els.adminPassword.value })
+  });
+
+  if (!response.ok) {
     showAdminMessage("Incorrect admin password.", "error");
     return;
   }
+
+  const payload = await response.json();
+  adminToken = payload.token || "";
   adminUnlocked = true;
   els.adminLogin.hidden = true;
   els.adminTools.hidden = false;
@@ -1510,6 +1531,28 @@ function unlockAdmin() {
   els.adminStatus.classList.add("unlocked");
   els.adminPassword.value = "";
   showAdminMessage("Admin unlocked for this device.", "success");
+}
+
+async function resetAdminPassword() {
+  const response = await fetch(`${API_BASE_URL}/api/admin/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: els.adminResetEmail?.value || "",
+      resetToken: els.adminResetToken?.value || "",
+      nextPassword: els.adminResetPassword?.value || ""
+    })
+  });
+
+  if (response.ok) {
+    if (els.adminResetToken) els.adminResetToken.value = "";
+    if (els.adminResetPassword) els.adminResetPassword.value = "";
+    showAdminMessage("Password reset. Sign in with the new password.", "success");
+    return;
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  showAdminMessage(payload.error || "Password could not be reset.", "error");
 }
 
 function requireAdminUnlocked() {

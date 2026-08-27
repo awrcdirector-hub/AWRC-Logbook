@@ -127,6 +127,22 @@
                 <input id="adminPassword" type="password" autocomplete="current-password" placeholder="Enter password">
               </label>
               <button class="submit" type="button" id="adminUnlock">Unlock Admin</button>
+              <details class="forgot-password">
+                <summary>Forgot password?</summary>
+                <label>
+                  Recovery email
+                  <input id="adminResetEmail" type="email" value="awrcdirector@gmail.com">
+                </label>
+                <label>
+                  Reset token
+                  <input id="adminResetToken" type="password" autocomplete="off" placeholder="Private reset token">
+                </label>
+                <label>
+                  New password
+                  <input id="adminResetPassword" type="password" autocomplete="new-password" placeholder="New password">
+                </label>
+                <button class="submit secondary" type="button" id="adminResetPasswordButton">Reset password</button>
+              </details>
             </div>
             <p class="form-message admin-message" id="adminMessage" role="status" aria-live="polite"></p>
             <div id="adminTools" class="admin-tools" hidden>

@@ -587,6 +587,20 @@ textarea {
   gap: 12px;
 }
 
+.forgot-password {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.forgot-password summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
 .admin-tools {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
