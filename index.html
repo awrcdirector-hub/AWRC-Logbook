@@ -5,11 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f6f7d">
     <title>AWRC Outing Logbook</title>
-    <link rel="icon" href="/logbook-browser-icon-v11.png?v=logbook-notebook-check" type="image/png" sizes="512x512">
-    <link rel="icon" href="/favicon-32x32.png?v=logbook-notebook-check" type="image/png" sizes="32x32">
-    <link rel="shortcut icon" href="/logbook-browser-icon-v11.png?v=logbook-notebook-check" type="image/png">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=logbook-notebook-check">
-    <link rel="manifest" href="manifest.json?v=logbook-notebook-check">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="/logbook-icon-v10.png" type="image/png">
+    <link rel="apple-touch-icon" href="/logbook-icon-v10.png">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -19,7 +17,7 @@
           <p class="eyebrow">Crew safety and plant tracking</p>
           <h1>AWRC Outing Logbook</h1>
         </div>
-        <button class="logo-button" type="button" onclick="window.open('https://awrc-hub.onrender.com/#', '_blank', 'noopener')" aria-label="Open AWRC Hub">
+        <button class="logo-button" type="button" onclick="window.open('https://docs.google.com/spreadsheets/d/1mmKMRZyJSR3mr8VocTQ2Mimz6OavPIqyVza0tBUV_FU/edit?gid=344134665#gid=344134665', '_blank', 'noopener')" aria-label="Open AWRC Hub">
           <img class="club-logo" src="/awrc-logo.png" alt="Aramoho-Whanganui Rowing Club logo">
         </button>
         <div class="summary">
@@ -36,6 +34,19 @@
           <button class="big-action" type="button" data-view="plant">Plant</button>
           <button class="big-action" type="button" data-view="logbook">Logbook</button>
           <button class="big-action" type="button" data-view="admin">Admin</button>
+        </section>
+
+        <section class="notice" id="notificationNotice">
+          <div>
+            <strong>Phone pop-up notifications</strong>
+            <p>This prototype can show browser notifications on this device. A live club version will need push notifications so alerts still arrive when the app is closed.</p>
+            <label class="notify-person">
+              This device belongs to
+              <button id="notifyPersonSearch" class="picker-trigger" type="button">Choose your name</button>
+              <input id="notifyPerson" type="hidden">
+            </label>
+          </div>
+          <button type="button" id="enableNotifications">Enable</button>
         </section>
 
         <section class="view active" id="view-signout">
@@ -127,14 +138,6 @@
                 <input id="adminPassword" type="password" autocomplete="current-password" placeholder="Enter password">
               </label>
               <button class="submit" type="button" id="adminUnlock">Unlock Admin</button>
-              <details class="forgot-password">
-                <summary>Forgot password?</summary>
-                <label>
-                  Recovery email
-                  <input id="adminResetEmail" type="email" value="awrcdirector@gmail.com">
-                </label>
-                <button class="submit secondary" type="button" id="adminForgotPasswordButton">Email reset link</button>
-              </details>
             </div>
             <p class="form-message admin-message" id="adminMessage" role="status" aria-live="polite"></p>
             <div id="adminTools" class="admin-tools" hidden>
@@ -168,26 +171,6 @@
                   <input id="adminRemoveAthlete" type="hidden">
                 </label>
                 <button class="submit danger-submit" type="submit">Remove Athlete</button>
-              </form>
-
-              <form id="addAlertAdminForm" class="admin-card">
-                <h3>Add notification admin</h3>
-                <label>
-                  Name
-                  <input id="adminAlertAdminName" type="text" autocomplete="off" placeholder="Member name">
-                </label>
-                <div class="admin-mini-list" id="alertAdminList"></div>
-                <button class="submit" type="submit">Add Admin</button>
-              </form>
-
-              <form id="removeAlertAdminForm" class="admin-card">
-                <h3>Remove notification admin</h3>
-                <label>
-                  Name
-                  <button id="adminRemoveAlertAdminSearch" class="picker-trigger" type="button">Choose admin</button>
-                  <input id="adminRemoveAlertAdmin" type="hidden">
-                </label>
-                <button class="submit danger-submit" type="submit">Remove Admin</button>
               </form>
 
               <form id="addBoatForm" class="admin-card">

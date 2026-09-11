@@ -8,13 +8,18 @@ const OVERDUE_REPEAT_MINUTES = 10;
 const FLEET_SYNC_INTERVAL_MS = 60 * 1000;
 const SHARED_SYNC_INTERVAL_MS = 5000;
 const ALERT_POLL_INTERVAL_MS = 5000;
-const BOAT_ALLOCATION_CSV_URL = "https://docs.google.com/spreadsheets/d/1u5FggSDDpYk5m24o4D8UdPPujGj8G54US7rQ0PNE-B0/export?format=csv";
-const HUB_MEMBERS_URL = "https://awrc-hub.onrender.com/api/members";
+const BOAT_ALLOCATION_CSV_URL = "https://docs.google.com/spreadsheets/d/1u5FggSDDpYk5m24o4D8UdPPujGj8G54US7rQ0PNE-B0/gviz/tq?tqx=out:csv&sheet=AWRC%20Boat%20Allocation";
+const MIN_SYNCED_FLEET_SIZE = 40;
 const API_BASE_URL = "";
 const LOGBOOK_WEBHOOK_URL = "";
 const BOAT_STATUS_WEBHOOK_URL = "";
 let pushPublicVapidKey = "";
-const DEFAULT_ALERT_ADMINS = ["Axel Dickinson", "Allan Luff", "Tiffany Davies"];
+const ADMIN_PASSWORD = "2852";
+const ALERT_ROLES = {
+  coaches: ["Axel Dickinson", "Allan Luff"],
+  safetyOfficer: "Axel Dickinson",
+  alwaysNotify: ["Axel Dickinson", "Tiffany Davies"]
+};
 const HULL_TYPE_COLOURS = {
   racing: "#FFF2CC",
   training: "#F4CCCC",
@@ -263,19 +268,11 @@ const els = {
   adminStatus: $("#adminStatus"),
   adminPassword: $("#adminPassword"),
   adminUnlock: $("#adminUnlock"),
-  adminResetEmail: $("#adminResetEmail"),
-  adminForgotPasswordButton: $("#adminForgotPasswordButton"),
   addAthleteForm: $("#addAthleteForm"),
   adminAthleteName: $("#adminAthleteName"),
   adminAthleteGrade: $("#adminAthleteGrade"),
   removeAthleteForm: $("#removeAthleteForm"),
   adminRemoveAthlete: $("#adminRemoveAthlete"),
-  addAlertAdminForm: $("#addAlertAdminForm"),
-  adminAlertAdminName: $("#adminAlertAdminName"),
-  alertAdminList: $("#alertAdminList"),
-  removeAlertAdminForm: $("#removeAlertAdminForm"),
-  adminRemoveAlertAdmin: $("#adminRemoveAlertAdmin"),
-  adminRemoveAlertAdminSearch: $("#adminRemoveAlertAdminSearch"),
   addBoatForm: $("#addBoatForm"),
   adminBoatName: $("#adminBoatName"),
   adminBoatSeats: $("#adminBoatSeats"),
@@ -288,6 +285,8 @@ const els = {
   adminStatusValue: $("#adminStatusValue"),
   adminStatusNote: $("#adminStatusNote"),
   adminMessage: $("#adminMessage"),
+  enableNotifications: $("#enableNotifications"),
+  notificationNotice: $("#notificationNotice"),
   notifyPersonSearch: $("#notifyPersonSearch"),
   notifyPerson: $("#notifyPerson"),
   adminRemoveAthleteSearch: $("#adminRemoveAthleteSearch"),
@@ -302,7 +301,6 @@ const els = {
 };
 let activePicker = null;
 let adminUnlocked = false;
-let adminToken = "";
 
 actionButtons.forEach((button) => {
   button.addEventListener("click", () => showView(button.dataset.view));
@@ -312,18 +310,15 @@ els.signOutForm.addEventListener("submit", signOut);
 els.boatSearch.addEventListener("click", openBoatPicker);
 els.coxSearch.addEventListener("click", openCoxswainPicker);
 els.coxCaptain.addEventListener("change", (event) => setCaptain(event.target));
-els.notifyPersonSearch?.addEventListener("click", openNotificationPersonPicker);
+els.enableNotifications.addEventListener("click", enableNotifications);
+els.notifyPersonSearch.addEventListener("click", openNotificationPersonPicker);
 els.adminRemoveAthleteSearch.addEventListener("click", openAdminRemoveAthletePicker);
 els.adminRemoveBoatSearch.addEventListener("click", () => openAdminBoatPicker("remove"));
 els.adminStatusBoatSearch.addEventListener("click", () => openAdminBoatPicker("status"));
 els.exportLogbook.addEventListener("click", exportLogbookCsv);
 els.adminUnlock.addEventListener("click", unlockAdmin);
-els.adminForgotPasswordButton?.addEventListener("click", sendPasswordResetEmail);
 els.addAthleteForm.addEventListener("submit", addAdminAthlete);
 els.removeAthleteForm.addEventListener("submit", removeAdminAthlete);
-els.addAlertAdminForm.addEventListener("submit", addAlertAdmin);
-els.removeAlertAdminForm.addEventListener("submit", removeAlertAdmin);
-els.adminRemoveAlertAdminSearch.addEventListener("click", openAdminRemoveAlertAdminPicker);
 els.addBoatForm.addEventListener("submit", addAdminBoat);
 els.removeBoatForm.addEventListener("submit", removeAdminBoat);
 els.boatStatusForm.addEventListener("submit", updateAdminBoatStatus);
@@ -338,23 +333,22 @@ setInterval(checkLateCrews, 15000);
 render();
 syncFleetFromSheet();
 syncSharedConfig();
-syncHubMembers();
 syncSharedOutings();
 pollSharedAlerts();
 setInterval(syncFleetFromSheet, FLEET_SYNC_INTERVAL_MS);
 setInterval(syncSharedConfig, FLEET_SYNC_INTERVAL_MS);
-setInterval(syncHubMembers, FLEET_SYNC_INTERVAL_MS);
 setInterval(syncSharedOutings, SHARED_SYNC_INTERVAL_MS);
 setInterval(pollSharedAlerts, ALERT_POLL_INTERVAL_MS);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     syncFleetFromSheet();
     syncSharedConfig();
-    syncHubMembers();
     syncSharedOutings();
     pollSharedAlerts();
+    renderNotificationNotice();
   }
 });
+window.addEventListener("focus", renderNotificationNotice);
 
 function load() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -474,10 +468,6 @@ async function syncSharedConfig() {
       state.members = state.members.filter((member) => !state.removedMembers.includes(member.name));
       changed = true;
     }
-    if (Array.isArray(payload.alertAdmins)) {
-      state.alertAdmins = normaliseNameList(payload.alertAdmins);
-      changed = true;
-    }
     if (changed) {
       save();
       render();
@@ -487,77 +477,16 @@ async function syncSharedConfig() {
   }
 }
 
-function normaliseHubMember(member) {
-  const source = typeof member === "string" ? { name: member } : member || {};
-  const name = String(source.name || "").trim().replace(/\s+/g, " ");
-  if (!name) return null;
-  return {
-    name,
-    grade: source.grade || source.ageGroup || "Club"
-  };
-}
-
-async function syncHubMembers() {
-  try {
-    const response = await fetch(HUB_MEMBERS_URL, { cache: "no-store" });
-    if (!response.ok) return;
-    const payload = await response.json();
-    const hubMembers = (Array.isArray(payload.members) ? payload.members : payload.names || [])
-      .map(normaliseHubMember)
-      .filter(Boolean);
-    if (!hubMembers.length) return;
-
-    const localByName = new Map(state.members.map((member) => [member.name.toLowerCase(), member]));
-    state.members = hubMembers
-      .map((member) => ({ ...localByName.get(member.name.toLowerCase()), ...member }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-    state.removedMembers = [];
-    save();
-    render();
-  } catch (error) {
-    console.warn("Hub member sync failed", error);
-  }
-}
-
-async function saveHubMember(member) {
-  try {
-    await fetch(`${API_BASE_URL}/api/hub-members`, {
-      method: "POST",
-      headers: adminHeaders(),
-      body: JSON.stringify({
-        name: member.name,
-        grade: member.grade || "",
-        role: member.grade === "Coxswain" ? "Coxswain" : "Athlete"
-      })
-    });
-  } catch (error) {
-    console.warn("Hub member save failed", error);
-  }
-}
-
-async function deleteHubMember(name) {
-  try {
-    await fetch(`${API_BASE_URL}/api/hub-members`, {
-      method: "DELETE",
-      headers: adminHeaders(),
-      body: JSON.stringify({ name })
-    });
-  } catch (error) {
-    console.warn("Hub member removal failed", error);
-  }
-}
-
 async function saveSharedConfig() {
   try {
     await fetch(`${API_BASE_URL}/api/config`, {
       method: "POST",
-      headers: adminHeaders(),
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         members: state.members,
         plant: state.plant,
         boatOverrides: state.boatOverrides || {},
-        removedMembers: state.removedMembers || [],
-        alertAdmins: notificationAdmins()
+        removedMembers: state.removedMembers || []
       })
     });
   } catch (error) {
@@ -593,7 +522,7 @@ async function syncFleetFromSheet() {
     if (!response.ok) throw new Error("Sheet request failed");
     const rows = parseCsv(await response.text());
     const liveFleet = extractFleetFromRows(rows);
-    if (!liveFleet.length) return;
+    if (!isValidFleetSync(rows, liveFleet)) return;
 
     const existingById = new Map(state.plant.map((boat) => [boat.id, boat]));
     const customBoats = state.plant.filter((boat) => boat.custom && !liveFleet.some((liveBoat) => liveBoat.id === boat.id));
@@ -691,6 +620,12 @@ function extractFleetFromRows(rows) {
   });
 }
 
+function isValidFleetSync(rows, fleet) {
+  const hasAllocationTitle = rows.some((row) => cleanCell(row[0]) === "Boat Allocation");
+  const hasFleetHeader = rows.some((row) => cleanCell(row[0]) === "Plant" && cleanCell(row[4]) === "Boat type");
+  return hasAllocationTitle && hasFleetHeader && fleet.length >= MIN_SYNCED_FLEET_SIZE;
+}
+
 function cleanCell(value) {
   return String(value || "").trim();
 }
@@ -698,7 +633,7 @@ function cleanCell(value) {
 function statusFromSheet(statusCell) {
   const status = cleanCell(statusCell).toLowerCase();
   if (status === "derigged") return "derigged";
-  if (status === "repairs" || status === "repair" || status === "needs repair") return "damage";
+  if (status === "damage" || status === "repairs" || status === "repair" || status === "needs repair") return "damage";
   if (status === "scull" || status === "sweep") return "available";
   if (status === "rigged" || status === "available" || !status) return "available";
   return "available";
@@ -746,7 +681,6 @@ function freshDemoData() {
   data.plant = data.plant.map(applyBoatColour);
   data.boatOverrides = {};
   data.removedMembers = [];
-  data.alertAdmins = DEFAULT_ALERT_ADMINS;
   return data;
 }
 
@@ -754,7 +688,6 @@ function normalizeState(savedState) {
   const merged = { ...freshDemoData(), ...savedState };
   merged.removedMembers = Array.isArray(merged.removedMembers) ? merged.removedMembers : [];
   merged.members = mergeMembers(demoData.members, Array.isArray(merged.members) ? merged.members : [], merged.removedMembers);
-  merged.alertAdmins = normaliseNameList(merged.alertAdmins?.length ? merged.alertAdmins : DEFAULT_ALERT_ADMINS);
   merged.boatOverrides = merged.boatOverrides && typeof merged.boatOverrides === "object" ? merged.boatOverrides : {};
   merged.plant = merged.plant
     .filter((item) => item.type === "Boat")
@@ -777,19 +710,6 @@ function mergeMembers(defaultMembers, savedMembers, removedMembers = []) {
   return [...membersByName.values()];
 }
 
-function normaliseNameList(names = []) {
-  const byName = new Map();
-  names
-    .map((name) => String(name || "").trim())
-    .filter(Boolean)
-    .forEach((name) => byName.set(name.toLowerCase(), name));
-  return [...byName.values()].sort((a, b) => a.localeCompare(b));
-}
-
-function notificationAdmins() {
-  return normaliseNameList(state.alertAdmins?.length ? state.alertAdmins : DEFAULT_ALERT_ADMINS);
-}
-
 function showView(name) {
   actionButtons.forEach((button) => button.classList.toggle("active", button.dataset.view === name));
   views.forEach((view) => view.classList.toggle("active", view.id === `view-${name}`));
@@ -803,10 +723,10 @@ function render() {
   renderPlant();
   renderLogbook();
   renderAdmin();
+  renderNotificationNotice();
 }
 
 function renderNotificationPersonOptions() {
-  if (!els.notifyPerson || !els.notifyPersonSearch) return;
   const selectedName = localStorage.getItem(NOTIFICATION_USER_KEY) || "";
   const exists = state.members.some((member) => member.name === selectedName);
   els.notifyPerson.value = exists ? selectedName : "";
@@ -1110,7 +1030,6 @@ function openCoxswainPicker() {
 }
 
 function openNotificationPersonPicker() {
-  if (!els.notifyPerson || !els.notifyPersonSearch) return;
   openPicker({
     title: "This device belongs to",
     placeholder: "Type your name",
@@ -1127,6 +1046,7 @@ function openNotificationPersonPicker() {
         localStorage.removeItem(PUSH_REGISTERED_KEY);
         localStorage.removeItem(PUSH_REGISTERED_USER_KEY);
       }
+      renderNotificationNotice();
       return true;
     }
   });
@@ -1143,22 +1063,6 @@ function openAdminRemoveAthletePicker() {
     onSelect: (member) => {
       els.adminRemoveAthlete.value = member.name;
       els.adminRemoveAthleteSearch.textContent = member.name;
-      return true;
-    }
-  });
-}
-
-function openAdminRemoveAlertAdminPicker() {
-  openPicker({
-    title: "Remove notification admin",
-    placeholder: "Type a name",
-    items: notificationAdmins().map((name) => ({
-      label: name,
-      value: name
-    })),
-    onSelect: (name) => {
-      els.adminRemoveAlertAdmin.value = name;
-      els.adminRemoveAlertAdminSearch.textContent = name;
       return true;
     }
   });
@@ -1491,37 +1395,13 @@ function renderAdmin() {
   const statusBoat = state.plant.find((boat) => boat.id === els.adminStatusBoat.value);
   els.adminStatusBoatSearch.textContent = statusBoat ? statusBoat.name : "Choose boat";
   if (!statusBoat) els.adminStatusBoat.value = "";
-
-  const removeAlertAdmin = notificationAdmins().find((name) => name === els.adminRemoveAlertAdmin.value);
-  els.adminRemoveAlertAdminSearch.textContent = removeAlertAdmin || "Choose admin";
-  if (!removeAlertAdmin) els.adminRemoveAlertAdmin.value = "";
-
-  els.alertAdminList.innerHTML = notificationAdmins()
-    .map((name) => `<span class="admin-mini-pill">${escapeHtml(name)}</span>`)
-    .join("");
 }
 
-function adminHeaders() {
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${adminToken}`
-  };
-}
-
-async function unlockAdmin() {
-  const response = await fetch(`${API_BASE_URL}/api/admin/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password: els.adminPassword.value })
-  });
-
-  if (!response.ok) {
+function unlockAdmin() {
+  if (els.adminPassword.value !== ADMIN_PASSWORD) {
     showAdminMessage("Incorrect admin password.", "error");
     return;
   }
-
-  const payload = await response.json();
-  adminToken = payload.token || "";
   adminUnlocked = true;
   els.adminLogin.hidden = true;
   els.adminTools.hidden = false;
@@ -1529,25 +1409,6 @@ async function unlockAdmin() {
   els.adminStatus.classList.add("unlocked");
   els.adminPassword.value = "";
   showAdminMessage("Admin unlocked for this device.", "success");
-}
-
-async function sendPasswordResetEmail() {
-  const response = await fetch(`${API_BASE_URL}/api/admin/forgot-password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email: els.adminResetEmail?.value || "",
-    })
-  });
-
-  if (response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    showAdminMessage(payload.message || "Password reset email sent.", "success");
-    return;
-  }
-
-  const payload = await response.json().catch(() => ({}));
-  showAdminMessage(payload.error || "Reset email could not be sent.", "error");
 }
 
 function requireAdminUnlocked() {
@@ -1572,12 +1433,10 @@ function addAdminAthlete(event) {
     showAdminMessage(`${name} is already in the athlete list.`, "error");
     return;
   }
-  const member = { name, grade: els.adminAthleteGrade.value, ageGroup: "" };
-  state.members.push(member);
+  state.members.push({ name, grade: els.adminAthleteGrade.value });
   state.members = sortedMembers();
   save();
   saveSharedConfig();
-  saveHubMember(member);
   els.addAthleteForm.reset();
   render();
   showAdminMessage(`${name} added. Athlete list now has ${state.members.length} names.`, "success");
@@ -1593,52 +1452,10 @@ function removeAdminAthlete(event) {
   }
   state.members = state.members.filter((member) => member.name !== name);
   state.removedMembers = [...new Set([...(state.removedMembers || []), name])];
-  state.alertAdmins = notificationAdmins().filter((adminName) => adminName !== name);
   save();
   saveSharedConfig();
-  deleteHubMember(name);
   render();
   showAdminMessage(`${name} removed. Athlete list now has ${state.members.length} names.`, "success");
-}
-
-function addAlertAdmin(event) {
-  event.preventDefault();
-  if (!requireAdminUnlocked()) return;
-  const name = els.adminAlertAdminName.value.trim();
-  if (!name) {
-    showAdminMessage("Enter a notification admin name.", "error");
-    return;
-  }
-  const member = state.members.find((item) => item.name.toLowerCase() === name.toLowerCase());
-  if (!member) {
-    showAdminMessage(`${name} is not in the member list. Add them as an athlete/member first.`, "error");
-    return;
-  }
-  if (notificationAdmins().some((adminName) => adminName.toLowerCase() === member.name.toLowerCase())) {
-    showAdminMessage(`${member.name} already receives Logbook admin notifications.`, "error");
-    return;
-  }
-  state.alertAdmins = normaliseNameList([...notificationAdmins(), member.name]);
-  save();
-  saveSharedConfig();
-  els.addAlertAdminForm.reset();
-  render();
-  showAdminMessage(`${member.name} will receive Logbook admin notifications.`, "success");
-}
-
-function removeAlertAdmin(event) {
-  event.preventDefault();
-  if (!requireAdminUnlocked()) return;
-  const name = els.adminRemoveAlertAdmin.value;
-  if (!name) {
-    showAdminMessage("Choose a notification admin to remove.", "error");
-    return;
-  }
-  state.alertAdmins = notificationAdmins().filter((adminName) => adminName !== name);
-  save();
-  saveSharedConfig();
-  render();
-  showAdminMessage(`${name} removed from Logbook admin notifications.`, "success");
 }
 
 function addAdminBoat(event) {
@@ -1913,7 +1730,9 @@ function sendMaintenanceAlert(outing, note) {
 function alertRecipients(outing) {
   const names = [
     outing.captain?.name,
-    ...notificationAdmins()
+    ...ALERT_ROLES.coaches,
+    ALERT_ROLES.safetyOfficer,
+    ...ALERT_ROLES.alwaysNotify
   ].filter(Boolean);
   return [...new Set(names)];
 }
@@ -1925,7 +1744,8 @@ function alertPayload(outing) {
     rowers: (outing.members || []).map((member) => member.name),
     coxswain: outing.coxswain?.name || "",
     captain: outing.captain?.name || "",
-    notificationAdmins: notificationAdmins(),
+    coaches: ALERT_ROLES.coaches,
+    safetyOfficer: ALERT_ROLES.safetyOfficer,
     outAt: outing.outAt,
     dueAt: outing.dueAt,
     alertAt: alertAt(outing.dueAt).toISOString(),
@@ -1972,7 +1792,13 @@ async function pollSharedAlerts() {
 }
 
 function sendNotificationForAlert(alert) {
-  return shouldReceiveAlert(alert);
+  if (isPushRegisteredForCurrentUser()) return false;
+  if (!shouldReceiveAlert(alert)) return false;
+  sendNotification(alert.title || "Outing Logbook alert", alert.message || "Open Outing Logbook for details.", {
+    tag: alert.key || alert.id || alert.type || "water-log-alert",
+    requireInteraction: Boolean(alert.requireInteraction)
+  });
+  return true;
 }
 
 function shouldReceiveAlert(alert) {
@@ -1991,14 +1817,100 @@ function isPushRegisteredForCurrentUser() {
     && localStorage.getItem(PUSH_REGISTERED_USER_KEY) === notificationUserName();
 }
 
+async function enableNotifications() {
+  if (!("Notification" in window)) {
+    alert("This browser does not support notifications.");
+    return;
+  }
+  if (!notificationUserName()) {
+    alert("Please choose who this device belongs to before enabling notifications.");
+    return;
+  }
+
+  const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+  if (permission === "granted") {
+    const pushReady = await registerDeviceForPush();
+    const body = pushReady
+      ? "This device is registered for Outing Logbook phone pop-up alerts."
+      : "This device can show Outing Logbook pop-up alerts while the app is open.";
+    sendNotification("Notifications enabled", body);
+  }
+  renderNotificationNotice();
+}
+
+function renderNotificationNotice() {
+  if (!("Notification" in window)) {
+    els.notificationNotice.querySelector("p").textContent = "This browser does not support notifications.";
+    els.enableNotifications.textContent = "Unavailable";
+    els.enableNotifications.disabled = true;
+    return;
+  }
+
+  if (Notification.permission === "granted") {
+    if (isPushRegisteredForCurrentUser()) {
+      els.notificationNotice.querySelector("p").textContent = `Enabled for ${notificationUserName() || "this device"}. This device only gets alerts addressed to that person.`;
+      els.enableNotifications.textContent = "Enabled";
+      els.enableNotifications.disabled = true;
+      return;
+    }
+
+    els.notificationNotice.querySelector("p").textContent = "Notifications are allowed, but this device still needs to be registered for phone push alerts. Tap Enable once more.";
+    els.enableNotifications.textContent = "Enable";
+    els.enableNotifications.disabled = false;
+    return;
+  }
+
+  if (Notification.permission === "denied") {
+    els.notificationNotice.querySelector("p").textContent = "Notifications are blocked for this page. Change the browser site settings to allow them.";
+    els.enableNotifications.textContent = "Blocked";
+    els.enableNotifications.disabled = true;
+    return;
+  }
+
+  els.notificationNotice.querySelector("p").textContent = "Choose your name, then tap Enable once. Captains only get alerts for their own boat. Coaches and the safety officer get late and damage alerts.";
+  els.enableNotifications.textContent = "Enable";
+  els.enableNotifications.disabled = false;
+}
+
 async function registerDeviceForPush() {
-  return false;
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+  const publicKey = await getPushPublicKey();
+  if (!publicKey) return false;
+  const userName = notificationUserName();
+  if (!userName) return false;
+
+  try {
+    const registration = await navigator.serviceWorker.register("service-worker.js");
+    await registration.update().catch(() => {});
+    await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    subscription = subscription || (await subscribeForPush(registration, publicKey));
+
+    try {
+      await sendPushSubscription(subscription, userName);
+    } catch (error) {
+      console.warn("Push subscription failed; trying a fresh phone registration", error);
+      await subscription.unsubscribe().catch(() => {});
+      subscription = await subscribeForPush(registration, publicKey);
+      await sendPushSubscription(subscription, userName);
+    }
+
+    localStorage.setItem(PUSH_REGISTERED_KEY, "true");
+    localStorage.setItem(PUSH_REGISTERED_USER_KEY, userName);
+    return true;
+  } catch (error) {
+    console.warn("Push registration failed", error);
+    localStorage.removeItem(PUSH_REGISTERED_KEY);
+    localStorage.removeItem(PUSH_REGISTERED_USER_KEY);
+    return false;
+  }
 }
 
 function subscribeForPush(registration, publicKey) {
-  void registration;
-  void publicKey;
-  return null;
+  return registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey)
+  });
 }
 
 async function getPushPublicKey() {
@@ -2015,9 +1927,17 @@ async function getPushPublicKey() {
 }
 
 async function sendPushSubscription(subscription, userName) {
-  void subscription;
-  void userName;
-  return false;
+  const response = await fetch(`${API_BASE_URL}/api/push/subscribe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      subscription,
+      userName,
+      app: "AWRC Outing Logbook",
+      registeredAt: new Date().toISOString()
+    })
+  });
+  if (!response.ok) throw new Error("Notification registration was not saved.");
 }
 
 function urlBase64ToUint8Array(base64String) {
@@ -2028,15 +1948,30 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 function sendNotification(title, body, options = {}) {
-  void title;
-  void body;
-  void options;
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.ready
+      .then((registration) => registration.showNotification(title, {
+        body,
+        icon: "/logbook-icon-v10.png",
+        badge: "/logbook-icon-v10.png",
+        tag: options.tag || title,
+        requireInteraction: Boolean(options.requireInteraction)
+      }))
+      .catch(() => showWindowNotification(title, body, options));
+  } else {
+    showWindowNotification(title, body, options);
+  }
 }
 
 function showWindowNotification(title, body, options = {}) {
-  void title;
-  void body;
-  void options;
+  new Notification(title, {
+    body,
+    icon: "/logbook-icon-v10.png",
+    tag: options.tag || title,
+    requireInteraction: Boolean(options.requireInteraction)
+  });
 }
 
 function activeOutings() {

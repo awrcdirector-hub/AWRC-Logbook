@@ -1,7 +1,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const { createHmac, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } = require("crypto");
+const { randomUUID } = require("crypto");
 let webPush = null;
 try {
   webPush = require("web-push");
@@ -16,18 +16,10 @@ const stateStoreUrl = process.env.STATE_STORE_URL || "";
 const stateStoreToken = process.env.STATE_STORE_TOKEN || "";
 const overdueGraceMs = 30 * 60 * 1000;
 const overdueRepeatMs = 10 * 60 * 1000;
-const defaultAlertAdmins = ["Axel Dickinson", "Allan Luff", "Tiffany Davies"];
+const alwaysNotify = ["Axel Dickinson", "Tiffany Davies"];
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || "";
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "";
 const vapidSubject = process.env.VAPID_SUBJECT || "mailto:admin@awrc.local";
-const hubNotifyUrl = process.env.HUB_NOTIFY_URL || "https://awrc-hub.onrender.com/api/notifications/send";
-const hubNotifySecret = process.env.HUB_NOTIFY_SECRET || "";
-const hubBaseUrl = (process.env.HUB_BASE_URL || "https://awrc-hub.onrender.com").replace(/\/$/, "");
-const logbookPublicUrl = process.env.LOGBOOK_PUBLIC_URL || "https://awrc-logbook.onrender.com/";
-const adminRecoveryEmail = "awrcdirector@gmail.com";
-const adminCredentialFile = process.env.ADMIN_CREDENTIAL_FILE || path.join(dataDir, "logbook-admin-credentials.json");
-const adminResetFile = process.env.ADMIN_RESET_FILE || path.join(dataDir, "logbook-admin-reset.json");
-const adminCredentialKey = "logbook-admin";
 
 if (webPush && vapidPublicKey && vapidPrivateKey) {
   webPush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
@@ -43,132 +35,8 @@ const types = {
   ".ico": "image/x-icon"
 };
 
-function requiredEnv(name) {
-  const value = (process.env[name] || "").trim();
-  if (!value) throw new Error(`${name} is not configured.`);
-  return value;
-}
-
-function hashPassword(password, salt = randomBytes(16).toString("hex")) {
-  return {
-    hash: pbkdf2Sync(password, salt, 210000, 32, "sha256").toString("hex"),
-    salt
-  };
-}
-
-function safeEqual(left, right) {
-  const leftBuffer = Buffer.from(String(left || ""));
-  const rightBuffer = Buffer.from(String(right || ""));
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
-}
-
-function readAdminCredentials() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(adminCredentialFile, "utf8"));
-    if (parsed.passwordHash && parsed.passwordSalt) return parsed;
-  } catch {}
-  return {
-    passwordHash: requiredEnv("ADMIN_PASSWORD_HASH"),
-    passwordSalt: requiredEnv("ADMIN_PASSWORD_SALT")
-  };
-}
-
-function verifyAdminPassword(password) {
-  const credential = readAdminCredentials();
-  const { hash } = hashPassword(password, credential.passwordSalt);
-  return safeEqual(hash, credential.passwordHash);
-}
-
-function issueAdminToken() {
-  const expires = Date.now() + 1000 * 60 * 60 * 12;
-  const payload = `${expires}`;
-  const signature = createHmac("sha256", requiredEnv("ADMIN_SESSION_SECRET")).update(payload).digest("hex");
-  return `${payload}.${signature}`;
-}
-
-function adminAuthorised(request) {
-  const header = request.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
-  const [expires, signature] = token.split(".");
-  const expiresAt = Number(expires);
-  if (!expires || !signature || !Number.isFinite(expiresAt) || expiresAt < Date.now()) return false;
-  const expected = createHmac("sha256", requiredEnv("ADMIN_SESSION_SECRET")).update(expires).digest("hex");
-  return safeEqual(signature, expected);
-}
-
-function requireAdmin(request, response) {
-  if (adminAuthorised(request)) return true;
-  sendJson(response, 401, { error: "Admin login required" });
-  return false;
-}
-
-function resetTokenHash(token) {
-  return createHmac("sha256", requiredEnv("ADMIN_SESSION_SECRET")).update(token).digest("hex");
-}
-
-function createPasswordResetLink() {
-  const token = randomBytes(32).toString("hex");
-  const expiresAt = Date.now() + 1000 * 60 * 30;
-  fs.mkdirSync(path.dirname(adminResetFile), { recursive: true });
-  fs.writeFileSync(adminResetFile, JSON.stringify({ tokenHash: resetTokenHash(token), expiresAt }, null, 2));
-  return `${logbookPublicUrl.replace(/\/$/, "")}/reset-password.html?token=${encodeURIComponent(token)}`;
-}
-
-async function sendPasswordResetEmail(link) {
-  const apiKey = (process.env.RESEND_API_KEY || "").trim();
-  const from = (process.env.PASSWORD_RESET_FROM_EMAIL || "").trim();
-  if (!apiKey || !from) throw new Error("Password reset email is not configured. Add RESEND_API_KEY and PASSWORD_RESET_FROM_EMAIL in Render.");
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from,
-      to: adminRecoveryEmail,
-      subject: "AWRC Logbook password reset",
-      html: `<p>Use this secure link to reset the AWRC Logbook admin password:</p><p><a href="${link}">Reset password</a></p><p>This link expires in 30 minutes.</p>`,
-      text: `Use this secure link to reset the AWRC Logbook admin password: ${link}\n\nThis link expires in 30 minutes.`
-    })
-  });
-  if (!response.ok) throw new Error(`Email service returned ${response.status}.`);
-}
-
-function resetAdminPassword(token, nextPassword) {
-  let reset;
-  try {
-    reset = JSON.parse(fs.readFileSync(adminResetFile, "utf8"));
-  } catch {
-    return false;
-  }
-  if (!reset?.tokenHash || !reset?.expiresAt || Date.now() > Number(reset.expiresAt)) return false;
-  if (!safeEqual(resetTokenHash(token), reset.tokenHash)) return false;
-  if (!String(nextPassword || "").trim() || String(nextPassword).trim().length < 4) {
-    throw new Error("Password must be at least 4 characters.");
-  }
-  const { hash, salt } = hashPassword(String(nextPassword).trim());
-  fs.mkdirSync(path.dirname(adminCredentialFile), { recursive: true });
-  fs.writeFileSync(adminCredentialFile, JSON.stringify({ key: adminCredentialKey, passwordHash: hash, passwordSalt: salt }, null, 2));
-  try {
-    fs.rmSync(adminResetFile, { force: true });
-  } catch {}
-  return true;
-}
-
-async function hubAdminToken() {
-  const password = (process.env.HUB_ADMIN_PASSWORD || "").trim();
-  if (!password) throw new Error("HUB_ADMIN_PASSWORD is not configured.");
-  const response = await fetch(`${hubBaseUrl}/api/admin/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password })
-  });
-  if (!response.ok) throw new Error("Hub admin login failed.");
-  const payload = await response.json();
-  if (!payload.token) throw new Error("Hub admin token was not returned.");
-  return payload.token;
-}
-
 function defaultState() {
-  return { outings: [], alerts: [], subscriptions: [], config: { members: [], plant: [], boatOverrides: {}, removedMembers: [], alertAdmins: defaultAlertAdmins } };
+  return { outings: [], alerts: [], subscriptions: [], config: { members: [], plant: [], boatOverrides: {}, removedMembers: [] } };
 }
 
 let serverState = defaultState();
@@ -197,8 +65,7 @@ function normalizeState(state = {}) {
       members: Array.isArray(state.config?.members) ? state.config.members : [],
       plant: Array.isArray(state.config?.plant) ? state.config.plant : [],
       boatOverrides: state.config?.boatOverrides && typeof state.config.boatOverrides === "object" ? state.config.boatOverrides : {},
-      removedMembers: Array.isArray(state.config?.removedMembers) ? state.config.removedMembers : [],
-      alertAdmins: normaliseNameList(state.config?.alertAdmins?.length ? state.config.alertAdmins : defaultAlertAdmins)
+      removedMembers: Array.isArray(state.config?.removedMembers) ? state.config.removedMembers : []
     }
   };
 }
@@ -372,36 +239,44 @@ function addAlert(state, alert) {
   };
   state.alerts.push(storedAlert);
   state.alerts = state.alerts.slice(-200);
-  sendHubPushAlert(storedAlert);
-}
-
-function sendHubPushAlert(alert) {
-  const recipients = (alert.recipients || []).filter(Boolean);
-  if (!hubNotifyUrl || !recipients.length || typeof fetch !== "function") return;
-
-  const headers = { "Content-Type": "application/json" };
-  if (hubNotifySecret) headers["X-Hub-Notify-Secret"] = hubNotifySecret;
-
-  fetch(hubNotifyUrl, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      app: "logbook",
-      recipients,
-      title: alert.title || "Outing Logbook alert",
-      body: alert.message || "Open Outing Logbook for details.",
-      url: logbookPublicUrl,
-      tag: alert.key || alert.id || alert.type || "awrc-logbook",
-      requireInteraction: Boolean(alert.requireInteraction)
-    })
-  }).catch((error) => {
-    console.warn("Hub notification forward failed", error.message);
-  });
+  sendWebPushAlert(state, storedAlert);
 }
 
 function sendWebPushAlert(state, alert) {
-  void state;
-  void alert;
+  if (!webPush || !vapidPublicKey || !vapidPrivateKey) return;
+  const recipients = new Set((alert.recipients || []).filter(Boolean));
+  if (!recipients.size) return;
+
+  const expiredEndpoints = new Set();
+  const latestByRecipient = new Map();
+  (state.subscriptions || [])
+    .filter((item) => recipients.has(item.userName) && item.subscription?.endpoint)
+    .forEach((item) => {
+      const existing = latestByRecipient.get(item.userName);
+      const existingTime = existing ? new Date(existing.updatedAt || existing.createdAt || 0).getTime() : 0;
+      const itemTime = new Date(item.updatedAt || item.createdAt || 0).getTime();
+      if (!existing || itemTime >= existingTime) latestByRecipient.set(item.userName, item);
+    });
+
+  const deliveries = [...latestByRecipient.values()]
+    .map((item) =>
+      webPush
+        .sendNotification(item.subscription, JSON.stringify(alert))
+        .catch((error) => {
+          if (error.statusCode === 404 || error.statusCode === 410) {
+            expiredEndpoints.add(item.subscription?.endpoint);
+          }
+          console.warn("Web push failed", item.userName, error.statusCode || error.message);
+        })
+    );
+
+  if (deliveries.length) {
+    Promise.allSettled(deliveries).then(() => {
+      if (!expiredEndpoints.size) return;
+      state.subscriptions = (state.subscriptions || []).filter((item) => !expiredEndpoints.has(item.subscription?.endpoint));
+      writeState(state);
+    });
+  }
 }
 
 function overdueMinutes(now, dueAt) {
@@ -430,22 +305,8 @@ function mergeConfig(currentConfig = {}, incomingConfig = {}) {
     members: [...membersByName.values()],
     plant: [...plantById.values()],
     boatOverrides,
-    removedMembers,
-    alertAdmins: normaliseNameList(incomingConfig.alertAdmins?.length ? incomingConfig.alertAdmins : currentConfig.alertAdmins?.length ? currentConfig.alertAdmins : defaultAlertAdmins)
+    removedMembers
   };
-}
-
-function normaliseNameList(names = []) {
-  const byName = new Map();
-  names
-    .map((name) => String(name || "").trim())
-    .filter(Boolean)
-    .forEach((name) => byName.set(name.toLowerCase(), name));
-  return [...byName.values()].sort((a, b) => a.localeCompare(b));
-}
-
-function notificationAdmins(config = readState().config) {
-  return normaliseNameList(config?.alertAdmins?.length ? config.alertAdmins : defaultAlertAdmins);
 }
 
 function checkOverdueCrews() {
@@ -482,7 +343,7 @@ function checkOverdueCrews() {
 }
 
 function alertRecipients(outing) {
-  return [...new Set([outing.captain?.name, ...notificationAdmins()].filter(Boolean))];
+  return [...new Set([outing.captain?.name, "Allan Luff", ...alwaysNotify].filter(Boolean))];
 }
 
 function captainRecipients(outing) {
@@ -501,45 +362,6 @@ function time(value) {
 async function handleApi(request, response, url) {
   const state = readState();
 
-  if (request.method === "POST" && url.pathname === "/api/admin/login") {
-    const body = await readBody(request);
-    if (!verifyAdminPassword(body.password || "")) {
-      sendJson(response, 401, { error: "Incorrect admin password." });
-      return;
-    }
-    sendJson(response, 200, { token: issueAdminToken() });
-    return;
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/admin/forgot-password") {
-    const body = await readBody(request);
-    if (String(body.email || "").trim().toLowerCase() !== adminRecoveryEmail) {
-      sendJson(response, 403, { error: `Password recovery is only available for ${adminRecoveryEmail}.` });
-      return;
-    }
-    try {
-      await sendPasswordResetEmail(createPasswordResetLink());
-      sendJson(response, 200, { ok: true, message: `Password reset email sent to ${adminRecoveryEmail}.` });
-    } catch (error) {
-      sendJson(response, 500, { error: error.message || "Password reset email could not be sent." });
-    }
-    return;
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/admin/reset-password") {
-    const body = await readBody(request);
-    try {
-      if (!resetAdminPassword(body.token || "", body.nextPassword || "")) {
-        sendJson(response, 401, { error: "Reset link is invalid or expired." });
-        return;
-      }
-      sendJson(response, 200, { ok: true });
-    } catch (error) {
-      sendJson(response, 400, { error: error.message || "Password could not be reset." });
-    }
-    return;
-  }
-
   if (request.method === "GET" && url.pathname === "/api/config") {
     sendJson(response, 200, state.config || defaultState().config);
     return;
@@ -551,30 +373,14 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/config") {
-    if (!requireAdmin(request, response)) return;
     state.config = mergeConfig(state.config || defaultState().config, await readBody(request));
     writeState(state);
     sendJson(response, 200, { ok: true, config: state.config });
     return;
   }
 
-  if ((request.method === "POST" || request.method === "DELETE") && url.pathname === "/api/hub-members") {
-    if (!requireAdmin(request, response)) return;
-    try {
-      const hubResponse = await fetch(`${hubBaseUrl}/api/members`, {
-        method: request.method,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await hubAdminToken()}` },
-        body: JSON.stringify(await readBody(request))
-      });
-      sendJson(response, hubResponse.status, await hubResponse.json());
-    } catch (error) {
-      sendJson(response, 500, { error: error.message || "Hub member sync failed." });
-    }
-    return;
-  }
-
   if (request.method === "GET" && url.pathname === "/api/push/public-key") {
-    sendJson(response, 200, { publicKey: "", configured: false, hubOnly: true });
+    sendJson(response, 200, { publicKey: vapidPublicKey, configured: Boolean(vapidPublicKey && vapidPrivateKey) });
     return;
   }
 
@@ -582,8 +388,7 @@ async function handleApi(request, response, url) {
     const subscriptions = state.subscriptions || [];
     const userName = url.searchParams.get("userName") || "";
     sendJson(response, 200, {
-      configured: false,
-      hubOnly: true,
+      configured: Boolean(webPush && vapidPublicKey && vapidPrivateKey),
       subscriptionCount: subscriptions.length,
       users: [...new Set(subscriptions.map((item) => item.userName).filter(Boolean))].sort(),
       userRegistered: userName ? subscriptions.some((item) => item.userName === userName && item.subscription?.endpoint) : null
@@ -592,7 +397,24 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/push/subscribe") {
-    sendJson(response, 409, { error: "Phone notifications are managed through AWRC Hub.", hubOnly: true });
+    const body = await readBody(request);
+    if (!body.userName || !body.subscription) {
+      sendJson(response, 400, { error: "Missing userName or subscription" });
+      return;
+    }
+    const endpoint = body.subscription?.endpoint;
+    state.subscriptions = (state.subscriptions || []).filter(
+      (item) => item.subscription?.endpoint !== endpoint && item.userName !== body.userName
+    );
+    state.subscriptions.push({
+      id: randomUUID(),
+      userName: body.userName,
+      subscription: body.subscription,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    writeState(state);
+    sendJson(response, 200, { ok: true, userName: body.userName, subscriptionCount: state.subscriptions.length });
     return;
   }
 
