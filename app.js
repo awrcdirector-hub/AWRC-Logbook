@@ -1954,8 +1954,8 @@ function sendNotification(title, body, options = {}) {
     navigator.serviceWorker.ready
       .then((registration) => registration.showNotification(title, {
         body,
-        icon: "/logbook-icon-v10.png",
-        badge: "/logbook-icon-v10.png",
+        icon: "/logbook-icon-v11.png",
+        badge: "/logbook-icon-v11.png",
         tag: options.tag || title,
         requireInteraction: Boolean(options.requireInteraction)
       }))
@@ -1968,7 +1968,7 @@ function sendNotification(title, body, options = {}) {
 function showWindowNotification(title, body, options = {}) {
   new Notification(title, {
     body,
-    icon: "/logbook-icon-v10.png",
+    icon: "/logbook-icon-v11.png",
     tag: options.tag || title,
     requireInteraction: Boolean(options.requireInteraction)
   });
