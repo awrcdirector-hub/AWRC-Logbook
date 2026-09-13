@@ -531,9 +531,17 @@ function serveStatic(request, response, url) {
       return;
     }
 
-    response.writeHead(200, {
-      "Content-Type": types[path.extname(filePath)] || "text/plain"
-    });
+    const extension = path.extname(filePath);
+    const headers = {
+      "Content-Type": types[extension] || "text/plain"
+    };
+    if ([".html", ".json", ".ico", ".png"].includes(extension)) {
+      headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+      headers.Pragma = "no-cache";
+      headers.Expires = "0";
+    }
+
+    response.writeHead(200, headers);
     response.end(data);
   });
 }
