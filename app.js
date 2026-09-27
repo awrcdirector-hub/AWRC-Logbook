@@ -526,6 +526,9 @@ async function syncFleetFromSheet() {
 
     const existingById = new Map(state.plant.map((boat) => [boat.id, boat]));
     const customBoats = state.plant.filter((boat) => boat.custom && !liveFleet.some((liveBoat) => liveBoat.id === boat.id));
+    const resolvedOverrides = resolveSheetBoatOverrides(liveFleet, state.boatOverrides || {});
+    const overridesChanged = JSON.stringify(resolvedOverrides) !== JSON.stringify(state.boatOverrides || {});
+    state.boatOverrides = resolvedOverrides;
     state.plant = liveFleet.map((liveBoat) => {
       const existing = existingById.get(liveBoat.id);
       const override = state.boatOverrides?.[liveBoat.id] || {};
@@ -534,6 +537,7 @@ async function syncFleetFromSheet() {
     }).concat(customBoats.map(applyBoatColour));
     state.plant = state.plant.filter(Boolean).map(applyBoatColour);
     save();
+    if (overridesChanged) saveSharedConfig();
     render();
   } catch (error) {
     console.warn("Boat allocation sync failed", error);
@@ -624,6 +628,21 @@ function isValidFleetSync(rows, fleet) {
   const hasAllocationTitle = rows.some((row) => cleanCell(row[0]) === "Boat Allocation");
   const hasFleetHeader = rows.some((row) => cleanCell(row[0]) === "Plant" && cleanCell(row[4]) === "Boat type");
   return hasAllocationTitle && hasFleetHeader && fleet.length >= MIN_SYNCED_FLEET_SIZE;
+}
+
+function resolveSheetBoatOverrides(liveFleet, boatOverrides = {}) {
+  const resolved = { ...boatOverrides };
+
+  liveFleet.forEach((liveBoat) => {
+    const override = resolved[liveBoat.id];
+    if (!override || override.removed) return;
+    const hasNote = Boolean(cleanCell(override.note));
+    if (override.status === "damage" && !hasNote && liveBoat.status !== "damage") {
+      delete resolved[liveBoat.id];
+    }
+  });
+
+  return resolved;
 }
 
 function cleanCell(value) {
