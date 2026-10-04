@@ -329,18 +329,24 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("service-worker.js");
 }
 
+let hubMembers = [];
+let hubSyncInFlight = false;
 setInterval(checkLateCrews, 15000);
 render();
 syncFleetFromSheet();
 syncSharedConfig();
+syncHubMembers();
 syncSharedOutings();
 pollSharedAlerts();
 setInterval(syncFleetFromSheet, FLEET_SYNC_INTERVAL_MS);
 setInterval(syncSharedConfig, FLEET_SYNC_INTERVAL_MS);
+setInterval(syncHubMembers, 30000);
+window.addEventListener("focus", syncHubMembers);
 setInterval(syncSharedOutings, SHARED_SYNC_INTERVAL_MS);
 setInterval(pollSharedAlerts, ALERT_POLL_INTERVAL_MS);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
+    syncHubMembers();
     syncFleetFromSheet();
     syncSharedConfig();
     syncSharedOutings();
@@ -441,6 +447,31 @@ async function saveSharedSignIn(outing, issueType = "normal") {
   }
 }
 
+function applyHubMembers() {
+  const byName = new Map(state.members.map(member => [member.name.trim().toLowerCase(), member]));
+  for (const member of hubMembers) {
+    const existing = state.members.find(item => member.id && item.hubMemberId === member.id);
+    if (existing) byName.delete(existing.name.trim().toLowerCase());
+    const key = member.name.trim().toLowerCase();
+    byName.set(key, { ...byName.get(key), ...existing, ...member, hubMemberId: member.id });
+  }
+  state.members = [...byName.values()];
+}
+async function syncHubMembers() {
+  if (hubSyncInFlight) return;
+  hubSyncInFlight = true;
+  try {
+    const response = await fetch("https://awrc-hub.onrender.com/api/members", { cache: "no-store", signal: AbortSignal.timeout(8000) });
+    if (!response.ok) throw new Error("Hub unavailable");
+    const payload = await response.json();
+    if (!Array.isArray(payload.members) || payload.members.some(member => !member || typeof member.name !== "string" || !member.name.trim())) throw new Error("Invalid Hub roster");
+    hubMembers = payload.members;
+    applyHubMembers();
+    save();
+    render();
+  } catch (error) { console.warn("Hub roster refresh failed; keeping saved members", error); }
+  finally { hubSyncInFlight = false; }
+}
 async function syncSharedConfig() {
   try {
     const response = await fetch(`${API_BASE_URL}/api/config`, { cache: "no-store" });
@@ -469,6 +500,7 @@ async function syncSharedConfig() {
       changed = true;
     }
     if (changed) {
+      applyHubMembers();
       save();
       render();
     }
@@ -1111,7 +1143,7 @@ function openAdminBoatPicker(target) {
 }
 
 function sortedMembers() {
-  return [...state.members].sort((a, b) => a.name.localeCompare(b.name));
+  return state.members.filter(member => member.active !== false).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function sortedBoats() {
